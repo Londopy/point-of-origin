@@ -145,10 +145,19 @@ namespace PointOfOrigin
         /// <summary>Load levels.json; throws with a readable message when it is missing or empty.</summary>
         public static LevelSet Load()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // the browser cannot read StreamingAssets as files: the WebGL build copies levels.json into Resources
+            var path = "Resources/levels";
+            var text = Resources.Load<TextAsset>("levels")?.text;
+            if (string.IsNullOrEmpty(text))
+                throw new FileNotFoundException("No levels in Resources. Build with Point of Origin/Build WebGL, which copies them there.");
+#else
             var path = Path;
             if (!File.Exists(path))
                 throw new FileNotFoundException($"No levels at {path}. Run `nx run build.nx` in the repository root.");
-            var set = JsonUtility.FromJson<LevelSet>(File.ReadAllText(path));
+            var text = File.ReadAllText(path);
+#endif
+            var set = JsonUtility.FromJson<LevelSet>(text);
             if (set?.levels == null || set.levels.Length == 0)
                 throw new InvalidDataException($"{path} holds no levels.");
             foreach (var lv in set.levels)

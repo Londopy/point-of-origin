@@ -19,6 +19,51 @@ namespace PointOfOrigin.EditorTools
         [MenuItem("Point of Origin/Build Windows (x64)")]
         public static void PerformBuild() => PerformBuildTo(Output);
 
+        const string WebOutput = "Build/WebGL";
+
+        /// <summary>
+        /// The browser build. The Odin core cannot ship there, so the game runs SimCore, and the browser
+        /// cannot read StreamingAssets as files, so the levels and the wall's list are copied into
+        /// Resources first. Gzip with the decompression fallback, so any static host (itch) can serve it.
+        /// </summary>
+        [MenuItem("Point of Origin/Build WebGL")]
+        public static void PerformWebGL() => PerformWebGLTo(WebOutput);
+
+        public static void PerformWebGLTo(string output)
+        {
+            Directory.CreateDirectory("Assets/Resources");
+            File.Copy("Assets/StreamingAssets/levels.json", "Assets/Resources/levels.json", true);
+            File.Copy("Assets/StreamingAssets/initials.txt", "Assets/Resources/initials.txt", true);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+            PlayerSettings.productName = "Point of Origin";
+            PlayerSettings.companyName = "Londopy";
+            PlayerSettings.bundleVersion = Version;
+            PlayerSettings.runInBackground = true;
+            PlayerSettings.defaultWebScreenWidth = 1280;
+            PlayerSettings.defaultWebScreenHeight = 720;
+            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
+            PlayerSettings.WebGL.decompressionFallback = true;
+            PlayerSettings.WebGL.dataCaching = true;
+            PlayerSettings.WebGL.template = "APPLICATION:Minimal";
+            PlayerSettings.WebGL.threadsSupport = false;
+            PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.WebGL, ManagedStrippingLevel.Low);
+
+            var options = new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/SampleScene.unity" },
+                locationPathName = output,
+                target = BuildTarget.WebGL,
+                options = BuildOptions.None,
+            };
+            var report = BuildPipeline.BuildPlayer(options);
+            var summary = report.summary;
+            Debug.Log($"Point of Origin WebGL build: {summary.result}, {summary.totalSize / (1024 * 1024)} MB, {summary.totalErrors} errors -> {Path.GetFullPath(output)}");
+            File.WriteAllText(Path.Combine(Path.GetFullPath(output), "..", "webgl_build_result.txt"), $"{summary.result} {summary.totalErrors} errors {summary.totalSize / (1024 * 1024)} MB");
+            if (summary.result != BuildResult.Succeeded && Application.isBatchMode)
+                EditorApplication.Exit(1);
+        }
+
         /// <summary>Build to another folder, for when a running player holds the usual one.</summary>
         public static void PerformBuildTo(string output)
         {

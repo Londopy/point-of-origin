@@ -53,13 +53,22 @@ it takes an account).
 (the parallax ruin skylines, the simulated growth burst and the stone grain,
 baked to text and replayed by the game) and Blender (the wanderer, the ember
 and the seed, rendered flat-shaded). Made solo for CPGD's World's First Game
-Jam, theme ORIGIN. Windows, 64-bit.
+Jam, theme ORIGIN. Windows, 64-bit, or in the browser (the browser build runs
+a C# copy of the Odin core, checked against it on every chapter).
 
 **Source:** https://github.com/Londopy/point-of-origin
 
-**Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
-`PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a
-Windows executable. Cover image: `docs/cover.png` (630x500). Trailer GIF:
+**Uploads:** `dist/PointOfOrigin-win64.zip`, marked as a Windows executable,
+and `dist/PointOfOrigin-webgl.zip`, marked "This file will be played in the
+browser", viewport 1280 x 720, fullscreen button on, mobile off. Kind of
+project: HTML. Cover image: `docs/cover.png` (630x500). Trailer GIF:
 `docs/loop.gif` (plant, get clear, grow, cross). Screenshots from
-`docs/screenshots/`: the tutorial, Two Blooms, Quench grown, Two Echoes grown,
-Ashfall.
+`docs/screenshots/`: `itch_01_tutorial`, `itch_02_fused_bloom`,
+`itch_03_quench`, `itch_04_two_echoes`, `itch_05_ashfall`, `itch_06_shadow`.
+
+**itch fields:** Classification: Games. Genre: Platformer, Puzzle. Tags:
+puzzle-platformer, cellular-automata, pixel-art, 2d, singleplayer, chiptune,
+game-maker-not-used, odin, unity. Made with: Unity, Blender, Houdini. Average
+session: about an hour. Inputs: keyboard, gamepad (any). Accessibility:
+configurable controls, one-button. Multiplayer: no. Release status: released.
+Pricing: no payments. Community: comments.

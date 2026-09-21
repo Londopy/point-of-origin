@@ -1062,7 +1062,7 @@ namespace PointOfOrigin
                 {
                     switch (phase)
                     {
-                        case Phase.Title: QuitGame(); break;
+                        case Phase.Title: if (CanQuit) QuitGame(); break;
                         case Phase.GameOver: case Phase.Finished: EnterTitle(); break;
                         case Phase.Dead: break;
                         default: OpenMenu(); break;
@@ -2015,6 +2015,9 @@ namespace PointOfOrigin
             InputBridge.Bind(action, key);
         }
 
+        /// <summary>A browser tab has nothing to quit to.</summary>
+        static bool CanQuit => Application.platform != RuntimePlatform.WebGLPlayer;
+
         void QuitGame()
         {
             SavePrefs();
@@ -2413,12 +2416,13 @@ namespace PointOfOrigin
                     });
                 }
                 // the menu row under the chapters
-                string[] names = { "How to play", "Achievements", "Settings", "Controls", "Credits", "Quit" };
-                Action[] acts = { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Achievements), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
+                var names = new List<string> { "How to play", "Achievements", "Settings", "Controls", "Credits" };
+                var acts = new List<Action> { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Achievements), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits) };
+                if (CanQuit) { names.Add("Quit"); acts.Add(QuitGame); }
                 float mw = 150f * s, mh = 40f * s, mgap = 12f * s;
-                float mx = (Screen.width - (names.Length * mw + (names.Length - 1) * mgap)) / 2f;
+                float mx = (Screen.width - (names.Count * mw + (names.Count - 1) * mgap)) / 2f;
                 float my = TitleRowY + 104f * s;
-                for (int i = 0; i < names.Length; i++)
+                for (int i = 0; i < names.Count; i++)
                     buttons.Add(new Button { rect = new Rect(mx + i * (mw + mgap), my, mw, mh), label = names[i], act = acts[i], enabled = true });
                 return;
             }
@@ -2490,7 +2494,7 @@ namespace PointOfOrigin
                     Wide(ref y, "Settings", () => OpenPage(Overlay.Settings));
                     Wide(ref y, "Controls", () => OpenPage(Overlay.Controls));
                     Wide(ref y, "Credits", () => OpenPage(Overlay.Credits));
-                    Wide(ref y, "Quit to desktop", QuitGame);
+                    if (CanQuit) Wide(ref y, "Quit to desktop", QuitGame);
                     break;
                 }
                 case Overlay.Settings:
@@ -2536,7 +2540,7 @@ namespace PointOfOrigin
                         });
                         y += rowH;
                     }
-                    y += rowH + 52f * s;   // the fixed Menu row and the two note lines sit above these
+                    y += rowH + 88f * s;   // the fixed Menu row and the two note lines (the gamepad one wraps) sit above these
                     buttons.Add(new Button { rect = new Rect(cx - bw - gap / 2f, y, bw, bh), label = "Reset to defaults", act = () => { InputBridge.ResetBindings(); listening = null; sfx.Rewind(); }, enabled = true });
                     buttons.Add(new Button { rect = new Rect(cx + gap / 2f, y, bw, bh), label = "Back  [Esc]", act = Back, enabled = true });
                     break;
@@ -2688,11 +2692,11 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(page.x, y, page.width * 0.6f, keyH), "Menu", stRow);
                     GUI.Label(new Rect(page.xMax - 190f * s, y, 190f * s, keyH), "Esc, always", stRowValue);
                     y += rowH;
-                    GUI.Label(new Rect(page.x, y, page.width, 24f * s),
+                    GUI.Label(new Rect(page.x, y, page.width, 26f * s),
                         listening.HasValue ? "press the new key, or Esc to keep the old one" : "click a key to change it. The arrows, W and Enter always work as well.", stRowValue);
-                    y += 26f * s;
-                    GUI.Label(new Rect(page.x, y, page.width, 24f * s),
-                        (InputBridge.PadPresent ? "gamepad connected: " : "gamepad: ") + "stick or d-pad move, A jump, X plant, B grow, Y rewind, LB reveal, RB skip, Start menu, d-pad steers menus", stRowValue);
+                    y += 28f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 52f * s),
+                        (InputBridge.PadPresent ? "gamepad connected: " : "gamepad: ") + "stick or d-pad move, A jump, X plant, B grow, Y rewind, LB reveal, RB skip, Start menu", stRowValue);
                     break;
                 }
                 case Overlay.Help:
@@ -2916,7 +2920,7 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
                         "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity + Houdini", stSmallRight);
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width * 0.5f, 30f * s),
-                        (muted ? "sound off (M)" : "M sound") + "   Esc quit   v" + Application.version, stSmall);
+                        (muted ? "sound off (M)" : "M sound") + (CanQuit ? "   Esc quit" : "") + "   v" + Application.version, stSmall);
                     break;
                 }
                 case Phase.Story:

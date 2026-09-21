@@ -40,8 +40,12 @@ namespace PointOfOrigin
         public static void Load()
         {
             Names.Clear();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            Merge(Resources.Load<TextAsset>("initials")?.text);
+#else
             var shipped = Path.Combine(Application.streamingAssetsPath, "initials.txt");
             if (File.Exists(shipped)) Merge(File.ReadAllText(shipped));
+#endif
             Merge(PlayerPrefs.GetString(KeyCache, ""));
             if (Mine.Length > 0) Merge(Mine);
         }
