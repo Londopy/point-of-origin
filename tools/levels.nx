@@ -36,7 +36,7 @@ struct Level {
     rows: List(String)
     origins: List((i64, i64))
     pickups: List((i64, i64))
-    embers: List((i64, i64, bool))     // x, y, patrols vertically
+    embers: List((i64, i64, i64))      // x, y, kind: 0 patrols its row, 1 its column, 2 hunts along its row
     acid: List((i64, i64))             // `~` pools: rock to the automaton, deadly and not solid to the wanderer
     spikes: List((i64, i64))           // `^` deadly to touch, air to the automaton
     spouts: List((i64, i64))           // `f` vents in the rock that throw flame upward on a timer
@@ -56,7 +56,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
     var lv = Level{
         .name = String.new(), .hint = String.new(), .tip = String.new(), .intro = String.new(), .outro = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
-        .pickups = List((i64, i64)).new(), .embers = List((i64, i64, bool)).new(),
+        .pickups = List((i64, i64)).new(), .embers = List((i64, i64, i64)).new(),
         .acid = List((i64, i64)).new(), .spikes = List((i64, i64)).new(), .spouts = List((i64, i64)).new(), .crumble = List((i64, i64)).new(),
         .says = List((String, String)).new(), .secret = (0, 0), .has_secret = false,
         .start = (0, 0), .has_start = false, .exit = (0, 0), .has_exit = false, .w = 0, .h = 0,
@@ -115,8 +115,9 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         for c, x in row[..] {
             if c == 'o' or c == 'O' { lv.origins.append((x as i64, y as i64)) }
             if c == 'k' or c == 'K' { lv.pickups.append((x as i64, y as i64)) }
-            if c == 'e' { lv.embers.append((x as i64, y as i64, false)) }
-            if c == 'E' { lv.embers.append((x as i64, y as i64, true)) }
+            if c == 'e' { lv.embers.append((x as i64, y as i64, 0 as i64)) }
+            if c == 'E' { lv.embers.append((x as i64, y as i64, 1 as i64)) }
+            if c == 'h' { lv.embers.append((x as i64, y as i64, 2 as i64)) }
             if c == '~' { lv.acid.append((x as i64, y as i64)) }
             if c == '^' { lv.spikes.append((x as i64, y as i64)) }
             if c == 'f' { lv.spouts.append((x as i64, y as i64)) }
@@ -174,12 +175,13 @@ fn seeds_text(lv: *Level) -> String {
     return cells_text(&lv.origins)
 }
 
-/// The embers as `x,y,h;x,y,v` (h patrols its row, v its column).
+/// The embers as `x,y,h;x,y,v;x,y,H` (h patrols its row, v its column, H hunts along its row).
 fn embers_text(lv: *Level) -> String {
     var out = String.new()
     for e, i in lv.embers {
         if i > 0 { out.append(";") }
-        out.append(format("{},{},{}", .{e.0, e.1, if e.2 { "v" } else { "h" }})[..])
+        let kind = if e.2 == 1 { "v" } else if e.2 == 2 { "H" } else { "h" }
+        out.append(format("{},{},{}", .{e.0, e.1, kind})[..])
     }
     return out
 }

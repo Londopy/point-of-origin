@@ -17,7 +17,7 @@ namespace PointOfOrigin
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
-        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits, Wall }
+        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits, Wall, Wanderer }
 
         /// <summary>
         /// The first chapter walks the player through the loop, one prompt at a time, keyed to what they
@@ -32,6 +32,7 @@ namespace PointOfOrigin
             public Vector2Int dir;
             public Vector2 pos;      // grid coordinates
             public SpriteRenderer sr;
+            public bool hunter;      // turns toward the wanderer whenever they share its row
         }
 
         const int CellPx = 8;
@@ -360,17 +361,9 @@ namespace PointOfOrigin
             }
 
             // the wanderer rendered in Blender, if the frames shipped; otherwise the pixel figure above
-            var f0 = Resources.Load<Texture2D>("Sprites/wanderer_0");
-            var f1 = Resources.Load<Texture2D>("Sprites/wanderer_1");
-            if (f0 != null)
-            {
-                heroFrames = new[]
-                {
-                    Sprite.Create(f0, new Rect(0, 0, f0.width, f0.height), new Vector2(0.5f, 0f), f0.height),
-                    Sprite.Create(f1 != null ? f1 : f0, new Rect(0, 0, f0.width, f0.height), new Vector2(0.5f, 0f), f0.height),
-                };
-                playerSr.sprite = heroFrames[0];
-            }
+            heroBase0 = Resources.Load<Texture2D>("Sprites/wanderer_0");
+            heroBase1 = Resources.Load<Texture2D>("Sprites/wanderer_1");
+            ApplyLook();
 
             // the ruin skylines Houdini generated: two parallax layers behind the world
             var sky = Resources.Load<TextAsset>("Backdrop/skyline");
@@ -421,6 +414,7 @@ namespace PointOfOrigin
                 Debug.Log($"Point of Origin: origin_sim.dll version {Sim.NativeVersion}");
                 set = Levels.Load();
                 unlocked = Mathf.Clamp(unlocked, 0, set.levels.Length - 1);
+                ApplyLook();   // now that the save is known, a locked choice from a wiped save falls back
                 EnterTitle();
             }
             catch (Exception e)
@@ -928,7 +922,8 @@ namespace PointOfOrigin
                 sr.sprite = emberSprite;
                 sr.sortingOrder = 8;
                 sr.sharedMaterial = playerSr.sharedMaterial;
-                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right, sr = sr });
+                if (spec.hunter) sr.color = new Color(0.85f, 0.95f, 1f, 1f);   // a hunter burns paler, almost white
+                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right, sr = sr, hunter = spec.hunter });
             }
         }
 
@@ -1417,8 +1412,15 @@ namespace PointOfOrigin
         void UpdateEmbers(float dt)
         {
             var centre = PlayerCentre;
+            var playerCell = CellOf(centre);
             foreach (var e in embers)
             {
+                // a hunter turns toward the wanderer whenever they share its row and the way is open; it still keeps to its run
+                if (e.hunter && playerCell.y == e.cell.y && playerCell.x != e.cell.x && (e.pos - (Vector2)e.cell).sqrMagnitude < 1e-5f)
+                {
+                    var want = playerCell.x > e.cell.x ? Vector2Int.right : Vector2Int.left;
+                    if (want != e.dir && EmberOpen(e.cell + want)) e.dir = want;
+                }
                 var next = e.cell + e.dir;
                 if (!EmberOpen(next))
                 {
@@ -1745,6 +1747,8 @@ namespace PointOfOrigin
             ClearVoice();
             if (lives > 0) Say("die");
             Achievements.Died(why);
+            PlayerPrefs.SetInt(DeathsKey(levelIndex), PlayerPrefs.GetInt(DeathsKey(levelIndex), 0) + 1);
+            PlayerPrefs.Save();
         }
 
         void RestartLevel()
@@ -2001,7 +2005,9 @@ namespace PointOfOrigin
             Achievements.ResetAll();
             Wall.Reset();
             PlayerPrefs.DeleteKey(KeySecret);
+            for (int i = 0; i < set.levels.Length; i++) PlayerPrefs.DeleteKey(DeathsKey(i));
             secretFound = false;
+            ApplyLook();
             SavePrefs();
             sfx.Rewind();
         }
@@ -2017,6 +2023,83 @@ namespace PointOfOrigin
 
         /// <summary>A browser tab has nothing to quit to.</summary>
         static bool CanQuit => Application.platform != RuntimePlatform.WebGLPlayer;
+
+        // ------------------------------------------------------------------ the wanderer's look
+
+        Texture2D heroBase0, heroBase1;
+        int lookRobe, lookHat, lookLantern;      // what the Wanderer page is showing, open or not
+
+        int OriginsFound
+        {
+            get
+            {
+                var levels = set != null ? set.levels : null;
+                if (levels == null) return 0;
+                int n = 0;
+                for (int i = 0; i < levels.Length; i++) if (Solved(i)) n++;
+                return n;
+            }
+        }
+        bool SecretKnown => PlayerPrefs.GetInt(KeySecret, 0) != 0;
+
+        /// <summary>Rebuild the wanderer's frames from the base renders and the saved look.</summary>
+        void ApplyLook()
+        {
+            if (heroBase0 == null) return;
+            try
+            {
+                if (set != null && set.levels != null) Look.Settle(OriginsFound, SecretKnown);   // before the save is read, wear what was saved
+                var t0 = Look.Build(heroBase0, Look.Robe, Look.Hat, Look.Lantern);
+                var t1 = Look.Build(heroBase1 != null ? heroBase1 : heroBase0, Look.Robe, Look.Hat, Look.Lantern);
+                heroFrames = new[]
+                {
+                    Sprite.Create(t0, new Rect(0, 0, t0.width, t0.height), new Vector2(0.5f, 0f), t0.height),
+                    Sprite.Create(t1, new Rect(0, 0, t1.width, t1.height), new Vector2(0.5f, 0f), t1.height),
+                };
+                if (playerSr != null) playerSr.sprite = heroFrames[0];
+            }
+            catch (Exception e)
+            {
+                // the plain render is always there to fall back on; say what went wrong and carry on
+                Debug.LogWarning($"Point of Origin: the wanderer's look could not be applied: {e}");
+                if (heroFrames == null || heroFrames.Length == 0)
+                {
+                    heroFrames = new[]
+                    {
+                        Sprite.Create(heroBase0, new Rect(0, 0, heroBase0.width, heroBase0.height), new Vector2(0.5f, 0f), heroBase0.height),
+                        Sprite.Create(heroBase1 != null ? heroBase1 : heroBase0, new Rect(0, 0, heroBase0.width, heroBase0.height), new Vector2(0.5f, 0f), heroBase0.height),
+                    };
+                    if (playerSr != null) playerSr.sprite = heroFrames[0];
+                }
+            }
+        }
+
+        /// <summary>Browse one of the three choices; an open choice is worn at once, a locked one only shown.</summary>
+        void StepLook(int kind, int d)
+        {
+            int found = OriginsFound; bool secret = SecretKnown;
+            if (kind == 0)
+            {
+                lookRobe = (lookRobe + d + Look.Robes.Length) % Look.Robes.Length;
+                if (Look.Open(Look.Robes[lookRobe], found, secret)) { Look.Robe = lookRobe; ApplyLook(); sfx.Select(); } else sfx.Blocked();
+            }
+            else if (kind == 1)
+            {
+                lookHat = (lookHat + d + Look.Hats.Length) % Look.Hats.Length;
+                if (Look.Open(Look.Hats[lookHat], found, secret)) { Look.Hat = lookHat; ApplyLook(); sfx.Select(); } else sfx.Blocked();
+            }
+            else
+            {
+                lookLantern = (lookLantern + d + Look.Lanterns.Length) % Look.Lanterns.Length;
+                if (Look.Open(Look.Lanterns[lookLantern], found, secret)) { Look.Lantern = lookLantern; ApplyLook(); sfx.Select(); } else sfx.Blocked();
+            }
+        }
+
+        // ------------------------------------------------------------------ deaths per chapter
+
+        const string KeyDeaths = "po.deaths.";
+        static string DeathsKey(int level) => KeyDeaths + level;
+        GUIStyle stDeaths;
 
         void QuitGame()
         {
@@ -2416,10 +2499,10 @@ namespace PointOfOrigin
                     });
                 }
                 // the menu row under the chapters
-                var names = new List<string> { "How to play", "Achievements", "Settings", "Controls", "Credits" };
-                var acts = new List<Action> { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Achievements), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits) };
+                var names = new List<string> { "How to play", "Wanderer", "Achievements", "Settings", "Controls", "Credits" };
+                var acts = new List<Action> { () => OpenPage(Overlay.Help), () => { lookRobe = Look.Robe; lookHat = Look.Hat; lookLantern = Look.Lantern; OpenPage(Overlay.Wanderer); }, () => OpenPage(Overlay.Achievements), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits) };
                 if (CanQuit) { names.Add("Quit"); acts.Add(QuitGame); }
-                float mw = 150f * s, mh = 40f * s, mgap = 12f * s;
+                float mw = 138f * s, mh = 40f * s, mgap = 10f * s;
                 float mx = (Screen.width - (names.Count * mw + (names.Count - 1) * mgap)) / 2f;
                 float my = TitleRowY + 104f * s;
                 for (int i = 0; i < names.Count; i++)
@@ -2553,6 +2636,23 @@ namespace PointOfOrigin
                     Wide(ref y, "Back  [Esc]", Back);
                     break;
                 }
+                case Overlay.Wanderer:
+                {
+                    float y = PageTop + 80f * s;
+                    float small = 46f * s, rowBh = 40f * s;
+                    void Arrows(Action prev, Action next)
+                    {
+                        buttons.Add(new Button { rect = new Rect(page.x + page.width * 0.6f, y, small, rowBh), label = "<", act = prev, enabled = true });
+                        buttons.Add(new Button { rect = new Rect(page.x + page.width * 0.6f + small + gap, y, small, rowBh), label = ">", act = next, enabled = true });
+                        y += RowH;
+                    }
+                    Arrows(() => StepLook(0, -1), () => StepLook(0, 1));
+                    Arrows(() => StepLook(1, -1), () => StepLook(1, 1));
+                    Arrows(() => StepLook(2, -1), () => StepLook(2, 1));
+                    y = Screen.height - 110f * s;
+                    Wide(ref y, "Back  [Esc]", Back);
+                    break;
+                }
                 case Overlay.Wall:
                 {
                     float y = Screen.height - 110f * s;
@@ -2603,6 +2703,7 @@ namespace PointOfOrigin
             stSmall = Make(16, FontStyle.Normal, TextAnchor.UpperLeft, "8a93a8");
             stSmallRight = Make(16, FontStyle.Normal, TextAnchor.UpperRight, "8a93a8");
             stSmallCentre = Make(15, FontStyle.Normal, TextAnchor.UpperCenter, "5f6880");
+            stDeaths = Make(14, FontStyle.Normal, TextAnchor.UpperCenter, "b45c52");
             stHint = Make(18, FontStyle.Italic, TextAnchor.LowerLeft, "b7bfd1");
             stBody = Make(20, FontStyle.Normal, TextAnchor.MiddleCenter, "b7bfd1");
             stButton = Make(19, FontStyle.Bold, TextAnchor.MiddleCenter, "e8ecf5");
@@ -2766,6 +2867,35 @@ namespace PointOfOrigin
                     if (wallNote.Length > 0) GUI.Label(new Rect(page.x, y, page.width, 48f * s), wallNote, stRowValue);
                     break;
                 }
+                case Overlay.Wanderer:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "WANDERER", stBanner);
+                    int found = OriginsFound; bool secret = SecretKnown;
+                    if (heroBase0 != null)
+                    {
+                        // the preview: the current frame, four times life size, on the right of the page
+                        var tex = Look.Build(heroBase0, Look.Robe, Look.Hat, Look.Lantern);
+                        float pw = 48f * 4f * s, ph = 64f * 4f * s;
+                        var pr = new Rect(page.xMax - pw - 8f * s, PageTop + 76f * s, pw, ph);
+                        Panel(new Rect(pr.x - 12f * s, pr.y - 12f * s, pw + 24f * s, ph + 24f * s), new Color(0.08f, 0.1f, 0.15f, 1f));
+                        GUI.DrawTexture(pr, tex, ScaleMode.StretchToFill, true);
+                    }
+                    float y = PageTop + 80f * s;
+                    void Row(string label, Look.Option o)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.2f, 40f * s), label, stRow);
+                        bool open = Look.Open(o, found, secret);
+                        GUI.Label(new Rect(page.x + page.width * 0.2f, y, page.width * 0.4f, 40f * s), open ? o.name : $"{o.name}  ({Look.Requirement(o)})", open ? stRow : stRowValue);
+                        y += RowH;
+                    }
+                    Row("Robe", Look.Robes[lookRobe]);
+                    Row("Hat", Look.Hats[lookHat]);
+                    Row("Lantern", Look.Lanterns[lookLantern]);
+                    y += 12f * s;
+                    GUI.Label(new Rect(page.x, y, page.width * 0.62f, 72f * s),
+                        $"{found} of {set.levels.Length} origins found. More cloth, hats and lights open as you find them, and one light is only for whoever finds where the road does not lead. Saved with your progress.", stRowValue);
+                    break;
+                }
                 case Overlay.Achievements:
                 {
                     GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "ACHIEVEMENTS", stBanner);
@@ -2911,6 +3041,16 @@ namespace PointOfOrigin
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(0, TitleRowY - 30f * s, Screen.width, 24f * s),
                         (done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)") + (PlayerPrefs.GetInt(KeySecret, 0) != 0 ? "   ·   the first seed is yours" : ""), stSmallCentre);
+                    {
+                        // how many lanterns each chapter has taken, under its button; nothing until it has taken one
+                        int n = set.levels.Length; float b = 44f * s, cg = 10f * s;
+                        float x0 = (Screen.width - (n * b + (n - 1) * cg)) / 2f;
+                        for (int i = 0; i < n; i++)
+                        {
+                            int d = PlayerPrefs.GetInt(DeathsKey(i), 0);
+                            if (d > 0) GUI.Label(new Rect(x0 + i * (b + cg) - cg / 2f, TitleRowY + b + 3f * s, b + cg, 18f * s), $"†{d}", stDeaths);
+                        }
+                    }
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);

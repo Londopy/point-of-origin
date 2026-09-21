@@ -123,6 +123,17 @@ into chapter 2. One line per GitHub account, so a signed-in account is the
 price of a place on the wall, and the word itself never leaves the game. A
 copy of the file ships in `StreamingAssets` for when there is no network.
 
+## Your wanderer
+
+A Wanderer page in the menus dresses the figure: seven robes, three hats and
+four lantern lights, done on the Blender render in code (the robe and the
+lantern's light are recoloured, the hats are pixels over the head) and saved
+with your progress. More of them open as origins are found, and one light is
+only for whoever finds where the road does not lead. The chapter select shows,
+under each chapter, how many lanterns it has taken from you. And some embers
+hunt: a pale one turns toward you whenever you share its row, so it cannot
+be waited out, only baited or quenched.
+
 ## Tutorial, menu, settings, controls
 
 The first chapter is the tutorial: a prompt under the header tells you the

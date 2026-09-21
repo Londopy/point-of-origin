@@ -112,14 +112,18 @@ allowed; shipping late is not.
       C# core reporting version -1. `dist/PointOfOrigin-webgl.zip` (14 MB).
 - [x] Six fresh screenshots in `docs/screenshots/itch_*.png`; the itch draft
       lists both uploads and every page field.
-- [ ] After the jam: **character design**. A simple way to make the wanderer
-      yours: a few palette swaps (robe, lantern glow) and a hat or two, chosen
-      on a page in the menus and saved with progress, with more of them
-      unlocking as chapters are solved. The sprite is a Blender render, so
-      recolours can be done in code on the loaded texture rather than
-      re-rendering; hats are a few pixels drawn over the head. Not before the
-      deadline: it touches the sprite, the menus, the save and the unlocks,
-      and would need its own playtest.
+- [x] (Monday 3:50 to 4:45 PM, on the `extras` branch, Londo's call) **character
+      design**: `Look.cs` recolours the robe and the lantern's light on the
+      loaded render and draws three hats over the head; a Wanderer page in
+      the title menu (seven robes, three hats, four lights, `po.look.*`),
+      locked choices shown with what opens them, more opening as origins are
+      found, one light for the secret. **Death counter** under each chapter
+      button on the title (`po.deaths.<i>`, nothing until a lantern is lost).
+      **Hunter embers** (glyph `h`, JSON `H`): pale, they turn toward the
+      wanderer whenever they share its row; one each in Bent Echo, Two Echoes
+      and Origin. The Houdini slab backdrop was left out: seen head-on by an
+      orthographic camera it is a rectangle behind skylines that already do
+      that job, and it needed art time the deadline did not have.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
@@ -148,9 +152,8 @@ allowed; shipping late is not.
 
 ## If there is time left over (only after "publish" is ticked)
 
-- A death counter per chapter on the chapter select.
-- Ember variants: one that follows you along its row.
-- The Houdini slab as a decorative backdrop behind the ground.
+- The Houdini slab as a decorative backdrop behind the ground (needs art
+  time; see the Monday list).
 
 ## Explicitly not doing
 

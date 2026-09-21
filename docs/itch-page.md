@@ -26,8 +26,9 @@ that grew in the shadow of a post, echoes cut short by cliffs or bent around
 rock, two echoes that cancelled each other, a mesa grown against a wall.
 Mind your feet: growth overgrows whoever stands inside it, the void takes
 whoever falls, acid pools and spikes take the careless, vents breathe fire on
-a count, some ledges crumble under you, and embers patrol the ruins, though a
-bloom that catches one puts it out. Three lanterns per chapter. The lantern
+a count, some ledges crumble under you, and embers patrol the ruins (the pale
+ones hunt along their row), though a bloom that catches one puts it out. Dress
+your wanderer: robes, hats and lantern lights that open as you find origins. Three lanterns per chapter. The lantern
 in your hand talks. The first chapter walks you through the loop, wrong turn
 included. Chiptune throughout, synthesised at start-up in a different key per
 chapter. Keyboard or gamepad. Progress is saved, and a tip appears after a

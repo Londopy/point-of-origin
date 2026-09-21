@@ -73,15 +73,16 @@ namespace PointOfOrigin
 
         public List<Vector2Int> PickupCells() => ParseCells(pickups);
 
-        public List<(Vector2Int cell, bool vertical)> EmberSpecs()
+        /// <summary>Embers as the compiler wrote them: `h` patrols its row, `v` its column, `H` hunts along its row.</summary>
+        public List<(Vector2Int cell, bool vertical, bool hunter)> EmberSpecs()
         {
-            var list = new List<(Vector2Int, bool)>();
+            var list = new List<(Vector2Int, bool, bool)>();
             if (string.IsNullOrEmpty(embers)) return list;
             foreach (var part in embers.Split(';'))
             {
                 var f = part.Split(',');
                 if (f.Length == 3 && int.TryParse(f[0], out var x) && int.TryParse(f[1], out var y))
-                    list.Add((new Vector2Int(x, y), f[2].Trim() == "v"));
+                    list.Add((new Vector2Int(x, y), f[2].Trim() == "v", f[2].Trim() == "H"));
             }
             return list;
         }
