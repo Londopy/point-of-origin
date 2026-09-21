@@ -150,6 +150,15 @@ namespace PointOfOrigin
         SpriteRenderer bgSr;
         SpriteRenderer farSr;    // Houdini-generated ruin skylines, parallax
         SpriteRenderer nearSr;
+        // the stone slab from the game's first, isometric version, as a far plateau behind the skylines
+        MeshRenderer slabMr;
+        Vector3 slabOffset = new Vector3(7.5f, 2f, 8f);    // centred on the camera at mid-level, its top face a band above the ground line, behind the skylines
+        Vector3 slabEuler = new Vector3(-58f, 0f, 0f);     // tilted so the top face shows, like a mesa seen from the road
+        Vector3 slabScale = new Vector3(6f, 1f, 0.7f);     // wide, thin, shallow
+        float slabParallax = 0.85f;
+        float slabBright = 2.2f;
+        Vector3 slabTint = new Vector3(0.9f, 1.0f, 1.35f);
+        bool slabFlip = true;                              // Houdini winds the other way round
         Sprite[] heroFrames;     // Blender-rendered wanderer, when present
         float animClock;
         readonly List<Vector2[]> burstFrames = new List<Vector2[]>();   // Houdini-simulated growth burst
@@ -381,6 +390,8 @@ namespace PointOfOrigin
                 }
             }
 
+            MakeSlab();
+
             // the growth burst Houdini simulated: one frame per line, x y pairs in cells
             var burst = Resources.Load<TextAsset>("Backdrop/burst");
             if (burst != null)
@@ -491,6 +502,49 @@ namespace PointOfOrigin
         }
 
         /// <summary>A silhouette texture from a height profile (one sample per cell), filled below the profile.</summary>
+        /// <summary>
+        /// The Houdini diorama base (Resources/Models/DioramaBase.txt, one vertex per line: x y z r g b, three
+        /// lines a triangle) as a mesh far behind the skylines: a plateau under the ruins' horizon, drawn
+        /// with the flat vertex-colour shader. Its baked colours are very dark, so they are lifted and cooled.
+        /// </summary>
+        void MakeSlab()
+        {
+            var text = Resources.Load<TextAsset>("Models/DioramaBase");
+            var slabShader = Resources.Load<Shader>("Shaders/VertexColor");
+            if (text == null || slabShader == null) return;
+            var verts = new List<Vector3>();
+            var cols = new List<Color>();
+            foreach (var line in text.text.Split('\n'))
+            {
+                var f = ParseFloats(line.Trim());
+                if (f.Count < 6) continue;
+                verts.Add(new Vector3(f[0], f[1], f[2]));
+                cols.Add(new Color(Mathf.Clamp01(f[3] * slabBright * slabTint.x), Mathf.Clamp01(f[4] * slabBright * slabTint.y), Mathf.Clamp01(f[5] * slabBright * slabTint.z), 1f));
+            }
+            int n = verts.Count - verts.Count % 3;
+            if (n < 3) return;
+            var tris = new int[n];
+            for (int i = 0; i < n; i += 3)
+            {
+                tris[i] = i;
+                tris[i + 1] = slabFlip ? i + 2 : i + 1;
+                tris[i + 2] = slabFlip ? i + 1 : i + 2;
+            }
+            var mesh = new Mesh { name = "Slab", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(verts);
+            mesh.SetColors(cols);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateBounds();
+            if (slabMr != null) Destroy(slabMr.gameObject);
+            var go = new GameObject("Slab");
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            slabMr = go.AddComponent<MeshRenderer>();
+            slabMr.sharedMaterial = new Material(slabShader);
+            slabMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            slabMr.receiveShadows = false;
+            slabMr.sortingOrder = -9;
+        }
+
         SpriteRenderer MakeSkyline(List<float> heights, Color32 color, int order)
         {
             int w = heights.Count * CellPx;
@@ -1500,12 +1554,18 @@ namespace PointOfOrigin
                 pos += new Vector3(o.x, o.y, 0f);
             }
             cam.transform.position = pos;
-            bgSr.transform.position = new Vector3(camBase.x, camBase.y, 5f);
+            bgSr.transform.position = new Vector3(camBase.x, camBase.y, 30f);   // the vignette stays behind the slab's whole depth
             float aspect = Mathf.Max(0.1f, cam.aspect);
             bgSr.transform.localScale = new Vector3(2f * cam.orthographicSize * aspect * 1.04f, 2f * cam.orthographicSize * 1.04f, 1f);
             // parallax: the skylines slide slower than the world and sit just below the ground line
             if (farSr != null) farSr.transform.position = new Vector3(camBase.x * 0.75f - 24f, -1.5f, 4f);
             if (nearSr != null) nearSr.transform.position = new Vector3(camBase.x * 0.5f - 24f, -1.0f, 3f);
+            if (slabMr != null)
+            {
+                slabMr.transform.position = new Vector3(camBase.x * slabParallax + slabOffset.x, slabOffset.y, slabOffset.z);
+                slabMr.transform.rotation = Quaternion.Euler(slabEuler);
+                slabMr.transform.localScale = slabScale;
+            }
             UpdateSpores(dt);
         }
 
