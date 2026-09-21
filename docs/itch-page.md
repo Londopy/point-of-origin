@@ -52,4 +52,7 @@ Jam, theme ORIGIN. Windows, 64-bit.
 
 **Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
 `PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a
-Windows executable. Cover image: `docs/cover.png` (630x500).
+Windows executable. Cover image: `docs/cover.png` (630x500). Trailer GIF:
+`docs/loop.gif` (plant, get clear, grow, cross). Screenshots from
+`docs/screenshots/`: the tutorial, Two Blooms, Quench grown, Two Echoes grown,
+Ashfall.
