@@ -67,6 +67,13 @@ allowed; shipping late is not.
       tracker tune (pulse, FM bell, triangle bass, lo-fi) in a key per chapter
       plus hazard sounds; gamepad support with d-pad menus; Nexium: hazard
       glyphs, `say` lines, a deduction report per chapter, `tools/chapters.nx`.
+- [x] (Monday 1:15 to 1:45 AM) **achievements and the easter egg**: eleven
+      achievements with toasts and a menu page, saved in PlayerPrefs; a hidden
+      route in Two Echoes (rock mass over the shelf, a chimney on alternating
+      blocks, a tunnel with spikes and a trapped ember, a chamber with the
+      first seed) that unlocks the hidden one, gives the lantern a line and a
+      new light. The level format has `?` and `say secret|`; the checker
+      requires the secret to be reachable. A signature fossil in chapter 2.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.

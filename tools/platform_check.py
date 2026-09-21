@@ -302,6 +302,10 @@ def check(lv, edges_out=None, verdicts=None, lv_index=0):
             problems.append(f"exit {exit_cell[0]} is not reachable after growth")
     if not exit_cell:
         problems.append("no exit")
+    # a secret, if the level has one, must be reachable on bare rock (it is off the road, not behind the growth)
+    secret = parse_cells(lv.get("secret", ""))
+    if secret and secret[0] not in reach0 and before.land(*secret[0]) not in reach0:
+        problems.append(f"secret {secret[0]} is not reachable")
     return problems
 
 

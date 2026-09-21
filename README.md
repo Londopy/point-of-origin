@@ -99,6 +99,16 @@ Controls page, and the arrows, W and Enter always work as well.
 | Esc | Pause menu in a chapter (resume, restart, chapter select, settings, controls, credits, quit); quit from the title |
 | Gamepad | Left stick or d-pad run, A jump, X plant, B grow, Y rewind, LB reveal, RB skip, Start menu; the d-pad steers every menu |
 
+## Achievements, and one thing the road does not lead to
+
+Eleven achievements, listed on their own page in the menus and saved with
+your progress: the first origin, an origin on the first attempt, a chapter
+without losing a lantern, the first origin within a minute, an ember put out,
+every open cell of a chapter seen before its origin, ten rewinds and still
+found, all ten without a Reveal, all ten, dying every way once, and one that
+is only ??? until you earn it. Somewhere in the ruins there is a place the
+road does not lead to; finding it changes the lantern's light for good.
+
 ## Tutorial, menu, settings, controls
 
 The first chapter is the tutorial: a prompt under the header tells you the

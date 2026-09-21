@@ -34,6 +34,15 @@ namespace PointOfOrigin
         public string spouts;   // "x,y;x,y" vents in the rock that throw flame two cells up on a timer
         public string crumble;  // "x,y;x,y" rock that falls away shortly after you stand on it
         public string says;     // "trigger|line||trigger|line": what the lantern says at wake, plant, grow, found, die
+        public string secret;   // "x,y" a cell the road does not lead to, or empty
+
+        public Vector2Int? SecretCell()
+        {
+            if (string.IsNullOrEmpty(secret)) return null;
+            var xy = secret.Split(',');
+            if (xy.Length == 2 && int.TryParse(xy[0], out var x) && int.TryParse(xy[1], out var y)) return new Vector2Int(x, y);
+            return null;
+        }
 
         public List<(string trigger, string line)> Lines()
         {

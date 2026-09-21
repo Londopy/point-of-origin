@@ -17,7 +17,7 @@ namespace PointOfOrigin
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
-        enum Overlay { None, Menu, Help, Settings, Controls, Credits }
+        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits }
 
         /// <summary>
         /// The first chapter walks the player through the loop, one prompt at a time, keyed to what they
@@ -228,6 +228,16 @@ namespace PointOfOrigin
         Vector2 lastMouse;
         float spoutHeard;
         float lastBubble;
+        // achievements and the secret
+        Vector2Int secretCell = new Vector2Int(-1, -1);
+        bool secretFound;
+        int rewinds;
+        float levelStartAt;
+        string toastTitle = "";
+        float toastAt = -10f;
+        const float ToastSeconds = 4.5f;
+        const string KeySecret = "po.secret";
+        const string KeyReveals = "po.reveals";
         // the background: fossils of older growths pressed into the rock, and a few spores drifting in the air
         int[] fossilPx = new int[0];         // pixel index in the world texture
         int[] fossilCell = new int[0];       // the rock cell that pixel belongs to (drawn only once seen)
@@ -552,6 +562,10 @@ namespace PointOfOrigin
             }
             var ex = level.ExitCell();
             exitCell = ex ?? new Vector2Int(-1, -1);
+            secretCell = level.SecretCell() ?? new Vector2Int(-1, -1);
+            secretFound = PlayerPrefs.GetInt(KeySecret, 0) != 0;
+            glowSr.color = secretFound ? new Color(0.78f, 1f, 0.72f, 0.3f) : new Color(1f, 0.85f, 0.6f, 0.28f);
+            rewinds = 0;
             attempts = 0;
             revealed = false;
             won = false;
@@ -799,6 +813,7 @@ namespace PointOfOrigin
                 if (e.sr != null) Destroy(e.sr.gameObject);
                 embers.RemoveAt(k);
                 sfx.Remove();
+                Achievements.Unlock("quench");
             }
         }
 
@@ -932,6 +947,7 @@ namespace PointOfOrigin
                     var cell = CellOf(PlayerCentre);
                     if (cell != lastRevealCell) { lastRevealCell = cell; RevealAround(cell); }
                     if (pickupsLeft.Remove(cell)) { carried++; sfx.Success(); Say("seed"); }
+                    if (cell == secretCell && !secretFound) FoundSecret();
                     if (won && cell == exitCell) { Next(); return; }
                     UpdateEmbers(dt);
                     if (tut != Tutorial.Off) UpdateTutorial(dt);
@@ -960,9 +976,51 @@ namespace PointOfOrigin
             if (phase == Phase.Result) resultTime += Time.deltaTime;
 
             UpdateVoice();
+            if (toastTitle.Length == 0 && Achievements.TryDequeueToast(out var toast)) { toastTitle = toast.title; toastAt = Time.time; sfx.DoorChime(); }
+            else if (toastTitle.Length > 0 && Time.time - toastAt > ToastSeconds) toastTitle = "";
             FollowCamera(dt);
             Paint();
             PlaceSprites();
+        }
+
+        // ------------------------------------------------------------------ achievements and the secret
+
+        /// <summary>The cell the road does not lead to. Once.</summary>
+        void FoundSecret()
+        {
+            secretFound = true;
+            PlayerPrefs.SetInt(KeySecret, 1);
+            PlayerPrefs.Save();
+            Achievements.Unlock("secret");
+            glowSr.color = new Color(0.78f, 1f, 0.72f, 0.3f);
+            allSeen = true;
+            shake = shakeOn ? 0.25f : 0f;
+            sfx.Success();
+            ClearVoice();
+            Say("secret");
+        }
+
+        /// <summary>Everything a found origin can earn.</summary>
+        void AwardForWin()
+        {
+            if (levelIndex == 0) Achievements.Unlock("first_light");
+            if (attempts == 1) Achievements.Unlock("exact");
+            if (lives == StartLives) Achievements.Unlock("untouched");
+            if (levelIndex == 0 && Time.time - levelStartAt < 60f) Achievements.Unlock("quick");
+            if (rewinds >= 10) Achievements.Unlock("patient");
+            if (!revealed)
+            {
+                bool every = true;
+                for (int i = 0; i < seen.Length && every; i++)
+                    if (rock[i] != Sim.Rock && !seen[i]) every = false;
+                if (every) Achievements.Unlock("corners");
+            }
+            int all = (1 << set.levels.Length) - 1;
+            if ((solvedMask & all) == all)
+            {
+                Achievements.Unlock("every_origin");
+                if (PlayerPrefs.GetInt(KeyReveals, 0) == 0) Achievements.Unlock("unaided");
+            }
         }
 
         /// <summary>A pad moves a focus through the buttons on screen and activates it; the mouse takes it back.</summary>
@@ -1394,6 +1452,7 @@ namespace PointOfOrigin
             tut = levelIndex == 0 && !Solved(0) ? Tutorial.Move : Tutorial.Off;
             tutTimer = 0f;
             jumps = 0;
+            levelStartAt = Time.time;
             voiceSaid.Clear();
             ClearVoice();
             sfx.SetMotif(levelIndex, brighter: levelIndex % 3 == 1, seed: levelIndex * 17 + 3);
@@ -1549,6 +1608,7 @@ namespace PointOfOrigin
             sfx.StingerDeath();
             ClearVoice();
             if (lives > 0) Say("die");
+            Achievements.Died(why);
         }
 
         void RestartLevel()
@@ -1658,6 +1718,7 @@ namespace PointOfOrigin
                 sfx.Success();
                 sfx.DoorChime();
                 Say("found");
+                AwardForWin();
                 if (exitCell.x < 0) Next();
             }
             else
@@ -1677,6 +1738,7 @@ namespace PointOfOrigin
             phase = Phase.Play;
             if (hadGrown)
             {
+                rewinds++;
                 SpawnEmbers();
                 sfx.Rewind();
             }
@@ -1694,6 +1756,8 @@ namespace PointOfOrigin
         {
             revealed = true;
             allSeen = true;
+            PlayerPrefs.SetInt(KeyReveals, PlayerPrefs.GetInt(KeyReveals, 0) + 1);
+            PlayerPrefs.Save();
             sfx.Reveal();
         }
 
@@ -1797,6 +1861,8 @@ namespace PointOfOrigin
             unlocked = 0;
             solvedMask = 0;
             solved = 0;
+            Achievements.ResetAll();
+            secretFound = false;
             SavePrefs();
             sfx.Rewind();
         }
@@ -1937,6 +2003,9 @@ namespace PointOfOrigin
             for (int i = 0; i < fossilPx.Length; i++)
                 if (allSeen || seen[fossilCell[i]]) px[fossilPx[i]] = fossilColor[i];
             PaintHazards(now);
+            // the secret: a faint pulse in its cell once the lantern has reached it; a steady mark once found
+            if (secretCell.x >= 0 && (allSeen || seen[secretCell.y * level.w + secretCell.x]))
+                PaintDot(secretCell.x, secretCell.y, secretFound ? Hex("b8ffb0") : Color32.Lerp(ColUnknown, ColSeedEdge, 0.25f + 0.5f * pulse));
             // the tutorial's beacon on the stone, once the player has reasoned it out, drawn even into the unexplored dark
             if (tut == Tutorial.Reason || tut == Tutorial.PlantRight)
                 foreach (var a in answer) PaintDot(a.x, a.y, pulse > 0.5f ? ColLamp : ColSeedEdge);
@@ -2205,8 +2274,8 @@ namespace PointOfOrigin
                     });
                 }
                 // the menu row under the chapters
-                string[] names = { "How to play", "Settings", "Controls", "Credits", "Quit" };
-                Action[] acts = { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
+                string[] names = { "How to play", "Achievements", "Settings", "Controls", "Credits", "Quit" };
+                Action[] acts = { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Achievements), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
                 float mw = 150f * s, mh = 40f * s, mgap = 12f * s;
                 float mx = (Screen.width - (names.Length * mw + (names.Length - 1) * mgap)) / 2f;
                 float my = TitleRowY + 104f * s;
@@ -2278,6 +2347,7 @@ namespace PointOfOrigin
                     Wide(ref y, "Restart chapter", () => { CloseOverlay(); Retry(); });
                     Wide(ref y, "Chapter select", () => { CloseOverlay(); EnterTitle(); });
                     Wide(ref y, "How to play", () => OpenPage(Overlay.Help));
+                    Wide(ref y, "Achievements", () => OpenPage(Overlay.Achievements));
                     Wide(ref y, "Settings", () => OpenPage(Overlay.Settings));
                     Wide(ref y, "Controls", () => OpenPage(Overlay.Controls));
                     Wide(ref y, "Credits", () => OpenPage(Overlay.Credits));
@@ -2334,6 +2404,7 @@ namespace PointOfOrigin
                 }
                 case Overlay.Credits:
                 case Overlay.Help:
+                case Overlay.Achievements:
                 {
                     float y = Screen.height - 110f * s;
                     Wide(ref y, "Back  [Esc]", Back);
@@ -2490,6 +2561,24 @@ namespace PointOfOrigin
                     Line("Laws", "The same law makes different shapes in different places: rock clips growth, and a bloom that reaches an ember puts it out.");
                     break;
                 }
+                case Overlay.Achievements:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "ACHIEVEMENTS", stBanner);
+                    GUI.Label(new Rect(0, PageTop + 62f * s, Screen.width, 26f * s), $"{Achievements.Count()} of {Achievements.All.Length}", stSmallCentre);
+                    float y = PageTop + 96f * s;
+                    float rowH = Mathf.Min(40f * s, (Screen.height - 130f * s - y) / Achievements.All.Length);
+                    foreach (var a in Achievements.All)
+                    {
+                        bool has = Achievements.Has(a.id);
+                        var old = GUI.color;
+                        GUI.color = has ? new Color(1f, 0.9f, 0.6f, 1f) : new Color(1f, 1f, 1f, 0.45f);
+                        GUI.Label(new Rect(page.x, y, page.width * 0.32f, rowH), has || !a.hidden ? a.title : "???", stRow);
+                        GUI.Label(new Rect(page.x + page.width * 0.32f, y, page.width * 0.68f, rowH), has || !a.hidden ? a.text : "Something the road does not lead to.", stRowValue);
+                        GUI.color = old;
+                        y += rowH;
+                    }
+                    break;
+                }
                 case Overlay.Credits:
                 {
                     GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "POINT OF ORIGIN", stBanner);
@@ -2615,7 +2704,7 @@ namespace PointOfOrigin
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(0, TitleRowY - 30f * s, Screen.width, 24f * s),
-                        done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)", stSmallCentre);
+                        (done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)") + (PlayerPrefs.GetInt(KeySecret, 0) != 0 ? "   ·   the first seed is yours" : ""), stSmallCentre);
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
@@ -2708,6 +2797,18 @@ namespace PointOfOrigin
             DrawVoice();
             if (Paused) DrawOverlay();
             DrawButtons(gui);
+            if (toastTitle.Length > 0)
+            {
+                // an achievement, sliding in at the top right
+                float age = Time.time - toastAt;
+                float slide = Mathf.SmoothStep(1f, 0f, Mathf.Clamp01(age / 0.35f)) + Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((age - ToastSeconds + 0.4f) / 0.4f));
+                float w = 340f * s, h = 58f * s;
+                var r = new Rect(Screen.width - w - 24f * s + slide * (w + 40f * s), 96f * s, w, h);
+                Panel(r, new Color(0.07f, 0.09f, 0.14f, 0.94f));
+                Panel(new Rect(r.x, r.y, 5f * s, h), new Color(1f, 0.85f, 0.45f, 1f));
+                GUI.Label(new Rect(r.x + 18f * s, r.y + 6f * s, w - 24f * s, 22f * s), "achievement", stSmall);
+                GUI.Label(new Rect(r.x + 18f * s, r.y + 26f * s, w - 24f * s, 28f * s), toastTitle, stRow);
+            }
         }
     }
 }

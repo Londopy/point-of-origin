@@ -41,7 +41,9 @@ struct Level {
     spikes: List((i64, i64))           // `^` deadly to touch, air to the automaton
     spouts: List((i64, i64))           // `f` vents in the rock that throw flame upward on a timer
     crumble: List((i64, i64))          // `c` rock that falls away after you stand on it
-    says: List((String, String))       // (trigger, line): what the lantern says; triggers wake, plant, grow, found, die, seed
+    says: List((String, String))       // (trigger, line): what the lantern says; triggers wake, plant, grow, found, die, seed, secret
+    secret: (i64, i64)                 // `?` a cell the road does not lead to
+    has_secret: bool
     start: (i64, i64)
     has_start: bool
     exit: (i64, i64)
@@ -56,7 +58,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
         .pickups = List((i64, i64)).new(), .embers = List((i64, i64, bool)).new(),
         .acid = List((i64, i64)).new(), .spikes = List((i64, i64)).new(), .spouts = List((i64, i64)).new(), .crumble = List((i64, i64)).new(),
-        .says = List((String, String)).new(),
+        .says = List((String, String)).new(), .secret = (0, 0), .has_secret = false,
         .start = (0, 0), .has_start = false, .exit = (0, 0), .has_exit = false, .w = 0, .h = 0,
     }
     var in_map = false
@@ -88,8 +90,8 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
                 return error.InvalidInput
             }
             let trigger = parts.0.trim()
-            if !(trigger == "wake" or trigger == "plant" or trigger == "grow" or trigger == "found" or trigger == "die" or trigger == "seed" or trigger == "door") {
-                eprintln("{}: unknown say trigger `{}` (wake, plant, grow, found, die, seed, door)", .{path, trigger})
+            if !(trigger == "wake" or trigger == "plant" or trigger == "grow" or trigger == "found" or trigger == "die" or trigger == "seed" or trigger == "door" or trigger == "secret") {
+                eprintln("{}: unknown say trigger `{}` (wake, plant, grow, found, die, seed, door, secret)", .{path, trigger})
                 return error.InvalidInput
             }
             lv.says.append((String.from(trigger), String.from(parts.1.trim())))
@@ -119,6 +121,10 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
             if c == '^' { lv.spikes.append((x as i64, y as i64)) }
             if c == 'f' { lv.spouts.append((x as i64, y as i64)) }
             if c == 'c' { lv.crumble.append((x as i64, y as i64)) }
+            if c == '?' {
+                lv.secret = (x as i64, y as i64)
+                lv.has_secret = true
+            }
             if c == 'x' or c == 'X' {
                 lv.exit = (x as i64, y as i64)
                 lv.has_exit = true
@@ -357,6 +363,8 @@ fn main() -> u8 {
         json.set(&mut obj, "crumble", json.string(crumble[..]))
         let says = says_text(&lv)
         json.set(&mut obj, "says", json.string(says[..]))
+        let secret = if lv.has_secret { format("{},{}", .{lv.secret.0, lv.secret.1}) } else { String.new() }
+        json.set(&mut obj, "secret", json.string(secret[..]))
         let ded = deduction(&lv, target, rock_flat[..])
         json.set(&mut obj, "candidates", json.number(ded.0 as f64))
         json.set(&mut obj, "centred", json.number(if ded.1 { 1.0 } else { 0.0 }))
