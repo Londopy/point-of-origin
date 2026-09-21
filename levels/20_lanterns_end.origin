@@ -2,7 +2,7 @@
 name Lantern's End
 rule B1/S012345678
 steps 5
-hint Three seeds lie along the bottom of the world, beyond a wall broken in two places. Three springs rose above it.
+hint Three seeds lie along the bottom of the world, beyond a wall broken in two places, with embers pacing the row before them. Three springs rose above.
 tip Two springs high on the left and right, one lower in the middle. The wall clipped the lowest one.
 intro The last of the ground. Three seeds wait below a broken wall, and above it the largest shape you have seen. You already know whose it is.
 outro Three springs, three seeds, one wanderer. The lantern goes out because it is no longer needed.
@@ -25,7 +25,7 @@ map
 ..........s..........
 .....................
 ..####.#######.####..
-.....................
+.....e.........e.....
 .k........k........k.
 .....................
 end

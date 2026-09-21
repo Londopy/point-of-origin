@@ -13,7 +13,18 @@ namespace PointOfOrigin
     /// </summary>
     public class GameController : MonoBehaviour
     {
-        enum Phase { Title, Story, Place, Growing, Result, Finished }
+        enum Phase { Title, Story, Place, Growing, Result, Dead, GameOver, Finished }
+
+        class Ember
+        {
+            public Vector2Int cell;
+            public Vector2Int dir;
+            public Vector2 pos;
+        }
+
+        const int StartLives = 3;             // lanterns per chapter
+        const float DeathSeconds = 1.4f;      // the fall, before the chapter restarts
+        const float EmberSpeed = 2.4f;        // cells per second
 
         const string Epilogue =
             "Every origin found. The world grows again, and you, who were its last seed, walk on in the light.";
@@ -67,6 +78,8 @@ namespace PointOfOrigin
         static readonly Color32 ColLamp = Hex("ffd9a0");
         static readonly Color32 ColHero = Hex("fff6dc");
         static readonly Color32 ColHeroEdge = Hex("ffb757");
+        static readonly Color32 ColEmber = Hex("ff5a1f");
+        static readonly Color32 ColEmberCore = Hex("ffe2a8");
         static readonly Vector2Int[] Dirs = { Vector2Int.left, Vector2Int.right, new Vector2Int(0, -1), new Vector2Int(0, 1) };
         static readonly Color32[] AgeRamp =
         {
@@ -107,6 +120,10 @@ namespace PointOfOrigin
         readonly List<Vector2Int> pickupsLeft = new List<Vector2Int>();  // seeds still lying in the world
         int carried;                                                       // seeds in hand
         bool fetching;                                                     // this level's seeds must be found first
+        readonly List<Ember> embers = new List<Ember>();
+        int lives = StartLives;
+        float deathAt;
+        string deathText = "";
 
         WorldView view;
         GameObject baseObj;
@@ -245,6 +262,9 @@ namespace PointOfOrigin
             pickupsLeft.AddRange(level.PickupCells());
             fetching = pickupsLeft.Count > 0;
             carried = fetching ? 0 : level.seeds;
+            embers.Clear();
+            foreach (var spec in level.EmberSpecs())
+                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right });
             seeds.Clear();
             answer = new HashSet<Vector2Int>(level.OriginCells());
             attempts = 0;
@@ -361,6 +381,7 @@ namespace PointOfOrigin
                     {
                         case Phase.Title: StartLevel(FirstUnsolved()); break;
                         case Phase.Story: phase = Phase.Place; break;
+                        case Phase.GameOver: Retry(); break;
                         case Phase.Finished: EnterTitle(); break;
                         case Phase.Place:
                             if (c.x >= 0) { if (c == hero && path.Count == 0) ToggleSeed(hero); else WalkTo(c); }
@@ -416,6 +437,13 @@ namespace PointOfOrigin
                     keyTimer = 0f;
                 }
                 MoveHero();
+                UpdateEmbers(Time.deltaTime);
+            }
+
+            if (phase == Phase.Dead && Time.time - deathAt > DeathSeconds)
+            {
+                if (lives > 0) RestartLevel();
+                else phase = Phase.GameOver;
             }
 
             if (phase == Phase.Growing)
@@ -453,6 +481,39 @@ namespace PointOfOrigin
 
         bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < level.w && c.y < level.h;
         bool Open(Vector2Int c) => InBounds(c) && rock[c.y * level.w + c.x] != Sim.Rock;
+
+        /// <summary>Where the wanderer may step: open ground that living growth has not taken (your own seeds at generation 0 are fine).</summary>
+        bool Passable(Vector2Int c)
+        {
+            if (!Open(c)) return false;
+            return sim.Generation == 0 || sim.Cells[c.y * level.w + c.x] != Sim.Alive;
+        }
+
+        /// <summary>Embers drift along their row or column, turning at rock or the edge; touching one is the end.</summary>
+        void UpdateEmbers(float dt)
+        {
+            foreach (var e in embers)
+            {
+                var next = e.cell + e.dir;
+                if (!Open(next))
+                {
+                    e.dir = -e.dir;
+                    next = e.cell + e.dir;
+                    if (!Open(next)) continue;
+                }
+                e.pos = Vector2.MoveTowards(e.pos, next, EmberSpeed * dt);
+                if ((e.pos - (Vector2)next).sqrMagnitude < 1e-5f)
+                {
+                    e.pos = next;
+                    e.cell = next;
+                }
+                if (Vector2.Distance(e.pos, heroPos) < 0.6f)
+                {
+                    Die("THE EMBER TOOK YOU");
+                    return;
+                }
+            }
+        }
 
         /// <summary>The level's start cell, or the open cell nearest the centre.</summary>
         Vector2Int StartCell()
@@ -492,7 +553,7 @@ namespace PointOfOrigin
         List<Vector2Int> FindPath(Vector2Int from, Vector2Int to)
         {
             var result = new List<Vector2Int>();
-            if (!Open(to) || from == to) return result;
+            if (!Passable(to) || from == to) return result;
             int w = level.w, n = w * level.h;
             var prev = new int[n];
             for (int i = 0; i < n; i++) prev[i] = -1;
@@ -507,7 +568,7 @@ namespace PointOfOrigin
                 foreach (var d in Dirs)
                 {
                     var m = c + d;
-                    if (!Open(m)) continue;
+                    if (!Passable(m)) continue;
                     int mi = m.y * w + m.x;
                     if (prev[mi] >= 0) continue;
                     prev[mi] = c.y * w + c.x;
@@ -542,13 +603,19 @@ namespace PointOfOrigin
         {
             if (path.Count > 0) return;
             var n = hero + dir;
-            if (Open(n)) path.Add(n);
+            if (Passable(n)) path.Add(n);
         }
 
         void MoveHero()
         {
             if (path.Count == 0) return;
             var next = path[0];
+            if (!Passable(next))
+            {
+                // the growth has taken the ground ahead: stop where you are
+                path.Clear();
+                return;
+            }
             Vector2 goal = next;
             heroPos = Vector2.MoveTowards(heroPos, goal, WalkSpeed * Time.deltaTime);
             if ((heroPos - goal).sqrMagnitude < 1e-5f)
@@ -611,6 +678,7 @@ namespace PointOfOrigin
             {
                 case Phase.Title: StartLevel(FirstUnsolved()); break;
                 case Phase.Story: phase = Phase.Place; break;
+                case Phase.GameOver: Retry(); break;
                 case Phase.Place: Grow(); break;
                 case Phase.Growing: while (phase == Phase.Growing) Advance(); break;
                 case Phase.Result: if (won) Next(); else Rewind(); break;
@@ -631,7 +699,39 @@ namespace PointOfOrigin
         void StartLevel(int index)
         {
             LoadLevel(index);
+            lives = StartLives;
             BeginLevel();
+            sfx.Select();
+        }
+
+        /// <summary>A lantern goes out. After the fall the chapter restarts, or the dark takes you.</summary>
+        void Die(string why)
+        {
+            if (phase == Phase.Dead || phase == Phase.GameOver) return;
+            phase = Phase.Dead;
+            deathAt = Time.time;
+            deathText = why;
+            lives = Mathf.Max(0, lives - 1);
+            path.Clear();
+            shake = 0.45f;
+            sfx.Fail();
+        }
+
+        /// <summary>Restart the chapter, keeping what the lantern has already shown.</summary>
+        void RestartLevel()
+        {
+            var keepSeen = seen;
+            var keepSeenAt = seenAt;
+            LoadLevel(levelIndex);
+            for (int i = 0; i < seen.Length && i < keepSeen.Length; i++)
+                if (keepSeen[i]) { seen[i] = true; seenAt[i] = keepSeenAt[i]; }
+            phase = Phase.Place;
+        }
+
+        void Retry()
+        {
+            lives = StartLives;
+            RestartLevel();
             sfx.Select();
         }
 
@@ -686,6 +786,11 @@ namespace PointOfOrigin
             sfx.Tick(gen);
             TrackChanges();
             match = sim.Compare(target);
+            if (sim.Cells[hero.y * level.w + hero.x] == Sim.Alive)
+            {
+                Die("OVERGROWN");
+                return;
+            }
             if (gen >= level.steps) Finish();
         }
 
@@ -754,6 +859,7 @@ namespace PointOfOrigin
                 return;
             }
             LoadLevel(levelIndex + 1);
+            lives = StartLives;
             BeginLevel();
         }
 
@@ -884,6 +990,17 @@ namespace PointOfOrigin
                         view.Box(p.x - 0.14f, yTop, p.z - 0.14f, p.x + 0.14f, yTop + 0.16f, p.z + 0.14f, ColReveal);
                 }
             }
+            // embers: hot drifting remnants, visible even in the dark
+            foreach (var e in embers)
+            {
+                var p = CellCentre(e.pos.x, e.pos.y);
+                float under = StandingHeight(e.cell);
+                float y0 = under + 0.14f + 0.04f * Mathf.Sin(now * 6f + e.cell.x);
+                float g = 0.5f + 0.5f * Mathf.Sin(now * 9f + e.cell.y);
+                var col = Color32.Lerp(ColEmber, ColEmberCore, g * 0.45f);
+                view.Box(p.x - 0.16f, y0, p.z - 0.16f, p.x + 0.16f, y0 + 0.30f, p.z + 0.16f, col);
+                view.Box(p.x - 0.08f, y0 + 0.30f, p.z - 0.08f, p.x + 0.08f, y0 + 0.44f, p.z + 0.08f, ColEmberCore);
+            }
             // seeds lying in the world: small crystals that hover and pulse, only where the lantern has been
             foreach (var k in pickupsLeft)
             {
@@ -907,10 +1024,14 @@ namespace PointOfOrigin
             var under = new Vector2Int(Mathf.RoundToInt(heroPos.x), Mathf.RoundToInt(heroPos.y));
             float ground = StandingHeight(under);
             float bob = 0.02f * Mathf.Sin(now * 5f) + 0.02f;
-            float y0 = ground + bob;
-            view.Box(p.x - 0.17f, y0, p.z - 0.17f, p.x + 0.17f, y0 + 0.42f, p.z + 0.17f, ColHero);
-            view.Box(p.x - 0.12f, y0 + 0.46f, p.z - 0.12f, p.x + 0.12f, y0 + 0.70f, p.z + 0.12f, ColHeroEdge);
-            view.Box(p.x + 0.20f, y0 + 0.18f, p.z - 0.06f, p.x + 0.32f, y0 + 0.34f, p.z + 0.06f, ColLamp);
+            // when a lantern goes out the figure sinks into the ground and darkens
+            float sink = phase == Phase.Dead || phase == Phase.GameOver ? EaseOut((now - deathAt) / 0.9f) : 0f;
+            float y0 = ground + bob - sink * 0.95f;
+            var body = Color32.Lerp(ColHero, ColAfter, sink);
+            var head = Color32.Lerp(ColHeroEdge, ColAfter, sink);
+            view.Box(p.x - 0.17f, y0, p.z - 0.17f, p.x + 0.17f, y0 + 0.42f, p.z + 0.17f, body);
+            view.Box(p.x - 0.12f, y0 + 0.46f, p.z - 0.12f, p.x + 0.12f, y0 + 0.70f, p.z + 0.12f, head);
+            if (sink < 0.5f) view.Box(p.x + 0.20f, y0 + 0.18f, p.z - 0.06f, p.x + 0.32f, y0 + 0.34f, p.z + 0.06f, ColLamp);
         }
 
         float StandingHeight(Vector2Int c)
@@ -984,6 +1105,10 @@ namespace PointOfOrigin
                         Add("Skip  [N]", Skip);
                         if (CanReveal) Add("Reveal  [V]", Reveal);
                     }
+                    break;
+                case Phase.GameOver:
+                    Add("Try again  [Enter]", Retry);
+                    Add("Menu  [Esc]", EnterTitle);
                     break;
             }
         }
@@ -1068,7 +1193,7 @@ namespace PointOfOrigin
             }
             if (level == null) return;
 
-            if (phase != Phase.Title && phase != Phase.Finished && phase != Phase.Story)
+            if (phase != Phase.Title && phase != Phase.Finished && phase != Phase.Story && phase != Phase.GameOver)
             {
                 // top left: level, then the law in plain words
                 GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
@@ -1083,10 +1208,13 @@ namespace PointOfOrigin
                     : $"Generation {sim.Generation} / {level.steps}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
                 string sub;
+                bool onLiving = sim.Cells[hero.y * level.w + hero.x] == Sim.Alive;
                 if (!placingHud) sub = $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
+                else if (onLiving) sub = "you stand on living ground: step off before you grow";
                 else if (fetching && carried == 0 && seeds.Count < level.seeds) sub = pickupsLeft.Count > 0 ? "the seeds lie somewhere in the dark: find them" : "";
                 else if (attempts > 0) sub = $"attempt {attempts + 1}";
                 else sub = "walk to where it began, then press Space";
+                sub += $"   lanterns {lives}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
 
                 // bottom left: the hint, or the tip once an attempt has failed
@@ -1140,6 +1268,28 @@ namespace PointOfOrigin
                     GUI.color = new Color(1f, 1f, 1f, pulse);
                     GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to wake", stBody);
                     GUI.color = old;
+                    break;
+                }
+                case Phase.Dead:
+                {
+                    float a = Mathf.Clamp01((Time.time - deathAt) * 3f);
+                    Panel(new Rect(0, Screen.height * 0.40f, Screen.width, 130f * s), new Color(0.12f, 0.03f, 0.04f, 0.82f * a));
+                    var old = GUI.color;
+                    GUI.color = new Color(1f, 1f, 1f, a);
+                    GUI.Label(new Rect(0, Screen.height * 0.40f, Screen.width, 76f * s), deathText, stBanner);
+                    GUI.Label(new Rect(0, Screen.height * 0.40f + 72f * s, Screen.width, 40f * s),
+                        lives > 0 ? $"a lantern gutters out: {lives} left" : "your last lantern is out", stBody);
+                    GUI.color = old;
+                    break;
+                }
+                case Phase.GameOver:
+                {
+                    Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.06f, 0.02f, 0.03f, 0.9f));
+                    float cy = Screen.height * 0.34f;
+                    GUI.Label(new Rect(0, cy - 60f * s, Screen.width, 100f * s), "THE DARK TOOK YOU", stTitle);
+                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 80f * s),
+                        $"Every lantern is out in chapter {levelIndex + 1}, {level.name}. Light them again and try once more.", stBody);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "Enter or click to try again   -   Esc for the menu", stBody);
                     break;
                 }
                 case Phase.Result:

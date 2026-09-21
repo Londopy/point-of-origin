@@ -27,10 +27,24 @@ namespace PointOfOrigin
         public string origins;  // "x,y;x,y" the designer's answer
         public string start;    // "x,y" where the wanderer wakes, or empty for the centre
         public string pickups;  // "x,y;x,y" seeds lying in the world; empty means the seeds are carried from the start
+        public string embers;   // "x,y,h;x,y,v" embers patrolling a row (h) or a column (v)
 
         public byte[] RockCells() => Cells(rock, Sim.Rock);
 
         public List<Vector2Int> PickupCells() => ParseCells(pickups);
+
+        public List<(Vector2Int cell, bool vertical)> EmberSpecs()
+        {
+            var list = new List<(Vector2Int, bool)>();
+            if (string.IsNullOrEmpty(embers)) return list;
+            foreach (var part in embers.Split(';'))
+            {
+                var f = part.Split(',');
+                if (f.Length == 3 && int.TryParse(f[0], out var x) && int.TryParse(f[1], out var y))
+                    list.Add((new Vector2Int(x, y), f[2].Trim() == "v"));
+            }
+            return list;
+        }
 
         static List<Vector2Int> ParseCells(string text)
         {

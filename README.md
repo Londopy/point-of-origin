@@ -13,6 +13,12 @@ red where it does not. Match it exactly and you have found the origin. Twenty
 chapters, four laws, and in the later ones the seeds themselves lie hidden in
 the world behind rock and must be fetched.
 
+It can go wrong. Living growth overgrows whoever stands on it, so step off
+your seed and out of the outline before you grow, or run. Embers drift along
+rows and columns in the later chapters and burn what they touch. You carry
+three lanterns per chapter; lose them all and the dark takes you, then you
+try again.
+
 ![Confluence, part-way explored](docs/screenshots/12_world_finale.png)
 
 ## Three languages, one game
@@ -72,8 +78,9 @@ last solved level's origins growing.
 
 Levels are plain text in `levels/`. `#` is rock, `o` an origin, `s` where the
 wanderer wakes, `k` a seed lying in the world (when a level has any, the
-wanderer starts empty-handed and must fetch them), and the tool grows the
-target for you. `intro` and `outro` lines carry the story:
+wanderer starts empty-handed and must fetch them), `e` an ember that patrols
+its row and `E` one that patrols its column, and the tool grows the target
+for you. `intro` and `outro` lines carry the story:
 
 ```
 name Ember

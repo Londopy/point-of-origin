@@ -22,8 +22,10 @@ where it all began. Stand there, plant the seed, and press Grow. Gold where
 your growth matches the outline, red where it does not. Match it exactly and
 you have found the point of origin. Twenty chapters across four laws, from a
 single ripple to three springs behind a broken wall; in the later chapters the
-seeds lie hidden in the world and must be found and carried. Progress is saved,
-and a tip appears after a failed attempt if you want one.
+seeds lie hidden in the world and must be found and carried. Mind your feet:
+living growth overgrows whoever stands on it, and embers patrol the ruins. Three
+lanterns per chapter. Progress is saved, and a tip appears after a failed
+attempt if you want one.
 
 **Controls:**
 
