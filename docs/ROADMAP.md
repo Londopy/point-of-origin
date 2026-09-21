@@ -99,23 +99,27 @@ allowed; shipping late is not.
       becomes a pocket after the growth, and any seed or origin that a cell you
       can reach first cannot reach back (that is what caught chapters 3 to 5 in
       the physics replay).
-- [ ] First thing: **Controls page text is cut off** (Londo, 3:50 AM, after the
-      third build). Check the page at 1280x720 and full screen; the gamepad note
-      and the row labels are the suspects.
-- [ ] **WebGL build** (Londo wants to try for it Monday; a browser build on
-      itch gets far more jam plays). The module is installed. The blocker is
-      the Odin core: either a C# port of the simulation (kept honest by a test
-      that grows every chapter both ways and compares to the CLI), or the Odin
-      plugin built with `-target:freestanding_wasm32` on a static arena, since
-      wasm has no allocator. Then PlayerPrefs, the synthesised audio, the wall
-      fetch (raw.githubusercontent.com allows cross-origin) and OpenURL all
-      work as they are. Budget three hours; itch upload as HTML5 with the
-      Windows zip beside it. Do it only after the Windows build is submitted.
-- [ ] If there is time after publish: **character design**. A simple way to
-      make the wanderer yours: a few palette swaps (robe, lantern glow) and a
-      hat or two, chosen on a page in the menus and saved with progress. The
-      sprite is a Blender render, so recolours can be done in code on the
-      loaded texture rather than re-rendering.
+- [x] (Monday 3:05 to 3:40 PM) **Controls page text cut off**: the two
+      footnotes overlapped and the gamepad line ran off its box; both have
+      room now and the buttons sit below them.
+- [x] (Monday 3:05 to 3:40 PM) **WebGL build**: `SimCore.cs` is the Odin
+      automaton in C#; `Sim` delegates to it on WebGL (and can on the desktop,
+      `Sim.UseManaged`, to check the two agree: every chapter grows
+      identically, generation by generation, and all ten solve on it). The
+      build copies levels.json and initials.txt into Resources, gzip with the
+      decompression fallback, Minimal template, 1280x720, Quit hidden. Ran in
+      the browser from a static server: title, story, tutorial, keyboard, the
+      C# core reporting version -1. `dist/PointOfOrigin-webgl.zip` (14 MB).
+- [x] Six fresh screenshots in `docs/screenshots/itch_*.png`; the itch draft
+      lists both uploads and every page field.
+- [ ] After the jam: **character design**. A simple way to make the wanderer
+      yours: a few palette swaps (robe, lantern glow) and a hat or two, chosen
+      on a page in the menus and saved with progress, with more of them
+      unlocking as chapters are solved. The sprite is a Blender render, so
+      recolours can be done in code on the loaded texture rather than
+      re-rendering; hats are a few pixels drawn over the head. Not before the
+      deadline: it touches the sprite, the menus, the save and the unlocks,
+      and would need its own playtest.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
