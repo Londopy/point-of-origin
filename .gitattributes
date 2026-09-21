@@ -1,0 +1,27 @@
+# Line endings: LF in the repository for everything text.
+* text=auto eol=lf
+
+# Binaries.
+*.png binary
+*.dll binary
+*.hipnc binary
+*.zip binary
+
+# Linguist: Nexium is not on GitHub's language list yet, so show it as Zig (closest cousin) rather than nothing.
+*.nx linguist-language=Zig
+*.odin linguist-language=Odin
+levels/*.origin linguist-language=Text
+levels/*.origin linguist-detectable=false
+
+# Generated or vendored: keep them out of the language bar.
+unity/PointOfOrigin/Assets/Scripts/Native/PoNative.cs linguist-generated=true
+unity/PointOfOrigin/Assets/StreamingAssets/levels.json linguist-generated=true
+unity/PointOfOrigin/Assets/Settings/** linguist-generated=true
+unity/PointOfOrigin/ProjectSettings/** linguist-generated=true
+unity/PointOfOrigin/Packages/** linguist-generated=true
+unity/PointOfOrigin/Assets/Resources/Backdrop/*.txt linguist-generated=true
+unity/PointOfOrigin/Assets/Resources/Models/*.txt linguist-generated=true
+*.meta linguist-generated=true
+*.asset linguist-generated=true
+*.unity linguist-generated=true
+docs/** linguist-documentation=true

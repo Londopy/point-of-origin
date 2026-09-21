@@ -1,5 +1,8 @@
 # Point of Origin
 
+[![CI](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml/badge.svg)](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-b8a98a.svg)](LICENSE)
+
 *You are shown how it ended. Find where it began.*
 
 A side-scrolling platformer built on a reverse cellular-automaton puzzle,
@@ -149,3 +152,22 @@ The level compiler also asks the CLI to count how many seed placements grow
 the same target (`origin_cli --solve`, a search over the open cells inside the
 target's bounding box), so ambiguous levels show up at build time. Every
 chapter has exactly one solution.
+
+## Checks
+
+CI runs on every push: `odin test native/sim` (the automaton's laws, rock,
+ages and the Jaccard compare), a build of the CLI and the plugin,
+`tools/verify_levels.py` (re-grows every chapter with the CLI and compares it
+to the committed `levels.json`), `tools/platform_check.py`, a one-solution
+check, and a check that every Odin export has its C# import. A tag `v*`
+drafts a GitHub release; the Windows zip is attached from the machine that
+built it. `unity-build.yml` can build the player on GitHub's runners but is
+manual, since it needs a Unity licence in the secrets.
+
+## Driving the Editor from a terminal
+
+The project has Unity's Pipeline package, so with the Editor open the `unity`
+CLI can drive it: `unity status` shows it as ready, `unity command` lists what
+it exposes, and `unity command eval_file` runs a C# snippet inside it. The
+scripted playtests in this project's history (physics probes, a bot that
+plays chapter 1, solving every chapter from its origins) were run that way.

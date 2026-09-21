@@ -1,0 +1,45 @@
+# A Windows player built on GitHub's runners. Manual only: it needs a Unity
+# licence in the repository secrets (UNITY_EMAIL, UNITY_PASSWORD and, for a
+# Pro/Plus seat, UNITY_SERIAL), and it pulls a multi-gigabyte Unity image, so
+# it stays out of the per-push CI. The jam build itself is made locally with
+# unity/PointOfOrigin/Assets/Editor/Builder.cs.
+name: Unity build (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-player:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/cache@v4
+        with:
+          path: unity/PointOfOrigin/Library
+          key: unity-library-${{ hashFiles('unity/PointOfOrigin/Packages/manifest.json') }}
+          restore-keys: unity-library-
+
+      - name: Build
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: unity/PointOfOrigin
+          unityVersion: 6000.6.0f1
+          targetPlatform: StandaloneWindows64
+          buildName: PointOfOrigin
+          buildMethod: PointOfOrigin.EditorTools.Builder.PerformBuild
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PointOfOrigin-win64
+          path: unity/PointOfOrigin/Build/Windows
+          if-no-files-found: error

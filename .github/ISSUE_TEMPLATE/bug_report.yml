@@ -1,0 +1,23 @@
+name: Bug report
+description: Something broke, trapped you, or looked wrong.
+labels: [bug]
+body:
+  - type: input
+    id: chapter
+    attributes:
+      label: Chapter
+      placeholder: "07 Quench"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. A screenshot helps.
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build
+      placeholder: "itch zip v1.0, Windows 11"

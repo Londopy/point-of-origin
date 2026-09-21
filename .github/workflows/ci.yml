@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Odin core, CLI and levels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Odin
+        uses: laytan/setup-odin@v2.12.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release: latest
+
+      - name: Odin version
+        run: odin version
+
+      - name: Test the simulation core
+        run: odin test native/sim -out:nx-out/sim_test
+
+      - name: Build the CLI and the plugin
+        run: |
+          mkdir -p tools/bin nx-out
+          odin build native/cli -out:tools/bin/origin_cli -o:speed
+          odin build native/plugin -build-mode:shared -out:nx-out/origin_sim.so -o:speed
+          ls -l tools/bin nx-out
+
+      - name: levels.json matches the level files
+        run: python3 tools/verify_levels.py --cli tools/bin/origin_cli
+
+      - name: Every chapter is reachable
+        run: python3 tools/platform_check.py unity/PointOfOrigin/Assets/StreamingAssets/levels.json
+
+      - name: Every chapter has exactly one solution
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          data = json.load(open("unity/PointOfOrigin/Assets/StreamingAssets/levels.json", encoding="utf-8"))
+          bad = [lv["name"] for lv in data["levels"] if lv.get("solutions") != 1]
+          print("solutions:", ", ".join(f"{lv['name']}={lv.get('solutions')}" for lv in data["levels"]))
+          if bad:
+              print("ambiguous or unsolved:", bad)
+              sys.exit(1)
+          EOF
+
+  scripts:
+    name: Python and Nexium tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python scripts compile
+        run: python3 -m compileall -q tools blender
+
+      - name: Nexium sources are present and named
+        run: |
+          test -f build.nx && test -f tools/bindgen.nx && test -f tools/levels.nx
+          grep -q "fn main" build.nx tools/bindgen.nx tools/levels.nx
+
+  bindings:
+    name: C# bindings match the Odin exports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every exported proc has a DllImport
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          odin = open("native/plugin/plugin.odin", encoding="utf-8").read()
+          cs = open("unity/PointOfOrigin/Assets/Scripts/Native/PoNative.cs", encoding="utf-8").read()
+          exports = re.findall(r"@\(export\)\s*\n\s*([A-Za-z_][A-Za-z0-9_]*)\s*::\s*proc", odin)
+          imports = set(re.findall(r"EntryPoint\s*=\s*\"([A-Za-z0-9_]+)\"", cs)) | set(re.findall(r"static extern [^;]*?\b([a-z_][a-z0-9_]*)\s*\(", cs))
+          missing = [e for e in exports if e not in imports]
+          print(f"{len(exports)} exports, {len(imports)} imports")
+          if missing:
+              print("missing from PoNative.cs:", missing, "(run nx run tools/bindgen.nx)")
+              sys.exit(1)
+          EOF

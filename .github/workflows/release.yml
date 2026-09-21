@@ -1,0 +1,26 @@
+# Push a tag like v1.0 and a GitHub release appears with generated notes.
+# The Windows zip is attached from the machine that built it:
+#     gh release upload v1.0 dist/PointOfOrigin-win64.zip
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Point of Origin ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            Windows, 64-bit. Download `PointOfOrigin-win64.zip`, unzip anywhere, run `PointOfOrigin.exe`.
+            Source and level files are in this repository; see the README for the build.
