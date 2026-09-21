@@ -15,13 +15,15 @@ born next to exactly one neighbour, or alive only when the neighbour count is
 odd, or keep everything you make. Something ended here, and you wake in the
 dark among its ruins.
 
-Your lantern shows only what is near you, so walk: click where you want to go
-and the wanderer finds a way around the rock. As the ruins reveal themselves,
-work out where it all began. Stand there, plant the seed, and press Grow. Gold
-where your growth matches the outline, red where it does not. Match it exactly
-and you have found the point of origin. Fifteen levels across four laws, from a
-single ripple to three springs behind a broken wall. Progress is saved, and a
-tip appears after a failed attempt if you want one.
+Your lantern shows only what is near you, and the ground itself rises out of
+the void as you walk it, so explore: click where you want to go and the
+wanderer finds a way around the rock. As the ruins reveal themselves, work out
+where it all began. Stand there, plant the seed, and press Grow. Gold where
+your growth matches the outline, red where it does not. Match it exactly and
+you have found the point of origin. Twenty chapters across four laws, from a
+single ripple to three springs behind a broken wall; in the later chapters the
+seeds lie hidden in the world and must be found and carried. Progress is saved,
+and a tip appears after a failed attempt if you want one.
 
 **Controls:**
 
@@ -34,8 +36,9 @@ tip appears after a failed attempt if you want one.
 - M: sound on or off, Esc: menu
 
 **Made with:** Odin (simulation core, as a native DLL), Nexium (build pipeline,
-binding generator and level compiler), Unity 6 (C#). Made solo for CPGD's
-World's First Game Jam, theme ORIGIN. Windows, 64-bit.
+binding generator and level compiler), Unity 6 (C#), Houdini (the stone slab
+under the world). Made solo for CPGD's World's First Game Jam, theme ORIGIN.
+Windows, 64-bit.
 
 **Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
 `PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a

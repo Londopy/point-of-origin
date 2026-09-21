@@ -14,6 +14,7 @@ Shader "PointOfOrigin/VertexColor"
             #pragma vertex vert
             #pragma fragment frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 
             struct Attributes
             {
@@ -31,7 +32,8 @@ Shader "PointOfOrigin/VertexColor"
             {
                 Varyings o;
                 o.positionHCS = TransformObjectToHClip(v.positionOS.xyz);
-                o.color = v.color;
+                // vertex colours are authored as sRGB hex values; the project renders in linear space
+                o.color = float4(SRGBToLinear(v.color.rgb), v.color.a);
                 return o;
             }
 

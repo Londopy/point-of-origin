@@ -24,10 +24,9 @@ namespace PointOfOrigin
                 if (f.Length < 6) continue;
                 verts.Add(new Vector3(
                     float.Parse(f[0], inv), float.Parse(f[1], inv), float.Parse(f[2], inv)));
-                cols.Add(new Color32(
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(float.Parse(f[3], inv) * 255f), 0, 255),
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(float.Parse(f[4], inv) * 255f), 0, 255),
-                    (byte)Mathf.Clamp(Mathf.RoundToInt(float.Parse(f[5], inv) * 255f), 0, 255), 255));
+                // Houdini writes linear values; the shader expects sRGB (it converts back), so store the gamma form
+                var linear = new Color(float.Parse(f[3], inv), float.Parse(f[4], inv), float.Parse(f[5], inv), 1f);
+                cols.Add((Color32)linear.gamma);
             }
             int triCount = verts.Count / 3;
             var centre = Vector3.zero;
