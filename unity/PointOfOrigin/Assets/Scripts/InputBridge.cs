@@ -258,6 +258,8 @@ namespace PointOfOrigin
             return false;
         }
 
+        public static bool ShiftHeld => Keyboard.current != null && (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+
         public static Vector2 MousePosition => Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
         public static bool Clicked => Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
         public static bool MouseHeld => Mouse.current != null && Mouse.current.leftButton.isPressed;

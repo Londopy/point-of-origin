@@ -109,6 +109,20 @@ found, all ten without a Reveal, all ten, dying every way once, and one that
 is only ??? until you earn it. Somewhere in the ruins there is a place the
 road does not lead to; finding it changes the lantern's light for good.
 
+That place has a wall. What is written on it was taken once by the spark law,
+and the key beside it shows what that law does to lettering. Read the word
+back and say it, and you can press your own initials, up to three letters,
+into the rock of the second chapter beside the maker's. To put them on
+everyone's wall the game opens a prefilled GitHub issue titled
+`initials: XYZ`, whose body carries a proof made from the word and your
+account name. The `Wall` workflow recomputes the proof from a repository
+secret and the issue's author, appends `XYZ login` to
+[docs/initials.txt](docs/initials.txt), answers, and closes the issue. Every
+copy of the game fetches that file at start-up and presses every name in it
+into chapter 2. One line per GitHub account, so a signed-in account is the
+price of a place on the wall, and the word itself never leaves the game. A
+copy of the file ships in `StreamingAssets` for when there is no network.
+
 ## Tutorial, menu, settings, controls
 
 The first chapter is the tutorial: a prompt under the header tells you the
@@ -212,7 +226,10 @@ to the committed `levels.json`), `tools/platform_check.py`, a one-solution
 check, and a check that every Odin export has its C# import. A tag `v*`
 drafts a GitHub release; the Windows zip is attached from the machine that
 built it. `unity-build.yml` can build the player on GitHub's runners but is
-manual, since it needs a Unity licence in the secrets.
+manual, since it needs a Unity licence in the secrets. `wall.yml` runs on
+every opened issue whose title starts with `initials:` (see the wall above;
+it needs the `WALL_ANSWER` secret) and can be tried by hand from the Actions
+tab with a title, a body and an account name.
 
 ## Driving the Editor from a terminal
 

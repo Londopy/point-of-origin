@@ -31,7 +31,11 @@ bloom that catches one puts it out. Three lanterns per chapter. The lantern
 in your hand talks. The first chapter walks you through the loop, wrong turn
 included. Chiptune throughout, synthesised at start-up in a different key per
 chapter. Keyboard or gamepad. Progress is saved, and a tip appears after a
-failed attempt if you want one.
+failed attempt if you want one. Eleven achievements, one of them hidden:
+somewhere there is a place the road does not lead to, and on its wall a word
+the spark law took once. Read it back and you can press your initials into
+the rock for everyone who plays after you (that part goes through GitHub, so
+it takes an account).
 
 **Controls** (rebindable on the Controls page; arrows, W and Enter always work):
 

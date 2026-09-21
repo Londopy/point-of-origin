@@ -74,6 +74,16 @@ allowed; shipping late is not.
       first seed) that unlocks the hidden one, gives the lantern a line and a
       new light. The level format has `?` and `say secret|`; the checker
       requires the secret to be reachable. A signature fossil in chapter 2.
+- [x] (Monday, done 1:50 AM) **the wall of initials**: the secret cell
+      reads a wall (`Overlay.Wall`): a word sparked once under B1/S, with
+      ORIGIN plain and sparked as the key; typed answer checked against a
+      hash; then initials (three letters, `PixelFont`) pressed into chapter
+      2's rock beside the signature, and a "Share on GitHub" that opens a
+      prefilled issue carrying a proof (word + account, hashed). `wall.yml`
+      checks the proof against the `WALL_ANSWER` secret, appends to
+      `docs/initials.txt` (one line per account), answers and closes the
+      issue; every copy fetches the file at start-up (`Wall.cs`), with a
+      shipped copy in StreamingAssets. Wall commits skip CI.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
@@ -105,13 +115,13 @@ allowed; shipping late is not.
 - A death counter per chapter on the chapter select.
 - Ember variants: one that follows you along its row.
 - The Houdini slab as a decorative backdrop behind the ground.
-- Gamepad bindings (the input layer is per action already).
 
 ## Explicitly not doing
 
 - 3D platforming or a 3D world (not reachable by Monday).
 - WebGL (the Odin DLL cannot ship there without a second sim implementation).
-- Multiplayer, leaderboards, cloud anything.
+- Multiplayer, leaderboards, cloud anything (the wall of initials is a text
+  file in this repository fed by a GitHub issue; no server).
 
 ## Definition of done for the submission
 

@@ -17,7 +17,7 @@ namespace PointOfOrigin
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
-        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits }
+        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits, Wall }
 
         /// <summary>
         /// The first chapter walks the player through the loop, one prompt at a time, keyed to what they
@@ -238,6 +238,18 @@ namespace PointOfOrigin
         const float ToastSeconds = 4.5f;
         const string KeySecret = "po.secret";
         const string KeyReveals = "po.reveals";
+        // the wall in the chamber: a word the spark law took once, a key to read it by, and the initials of those who did
+        const string WallKeyWord = "ORIGIN";
+        const string WallAnswerHash = "67000ce4110bd2f831f87e603af0c1b68b46e89e45e771b44e25e5444f1bdb5f";
+        const string WallAnswerLength = "REMEMBER";   // only its length is used on screen; the check is the hash
+        string wallTyped = "";
+        string wallInitials = "";
+        string wallUser = "";
+        string wallNote = "";
+        int wallStage;                                  // 0 read it, 1 solved: press your initials, 2 pressed: share it
+        List<Vector2Int> wallKeyPlain, wallKeySparked, wallCipher;
+        int wallKeyW, wallCipherW;
+        readonly List<string> fossilLog = new List<string>();   // where the lettered fossils went, for the checks
         // the background: fossils of older growths pressed into the rock, and a few spores drifting in the air
         int[] fossilPx = new int[0];         // pixel index in the world texture
         int[] fossilCell = new int[0];       // the rock cell that pixel belongs to (drawn only once seen)
@@ -381,6 +393,8 @@ namespace PointOfOrigin
                 }
             }
 
+            Wall.Load();
+            StartCoroutine(Wall.Fetch());
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
             muted = PlayerPrefs.GetInt(KeyMuted, 0) != 0;
@@ -611,6 +625,11 @@ namespace PointOfOrigin
         {
             var rng = new System.Random(levelIndex * 7919 + 17);
             int count = 3 + rng.Next(2);
+            fossilLog.Clear();
+            // on the second chapter the wall's initials follow the signature, each pressed in clean
+            var wallNames = new List<string>();
+            if (levelIndex == 1) foreach (var n in Wall.Names) if (n != "LC") wallNames.Add(n);
+            count += wallNames.Count;
             // dense laws only: a bloom slab, a coral, a shell ring; sparse echoes just look like scattered tiles
             (uint birth, uint survive, int steps)[] laws =
             {
@@ -630,11 +649,13 @@ namespace PointOfOrigin
 
             for (int k = 0; k < count; k++)
             {
-                // the last fossil of the second chapter is a signature pressed into the rock near the door
-                bool signature = levelIndex == 1 && k == count - 1;
+                // on the second chapter the signature and then everyone's initials are pressed into the rock near the door
+                int randomCount = count - wallNames.Count;
+                bool signature = levelIndex == 1 && k >= randomCount - 1;
+                string letters = signature ? (k == randomCount - 1 ? "LC" : wallNames[k - randomCount]) : null;
                 var law = laws[rng.Next(laws.Length)];
                 var alive = new List<Vector2Int>();
-                if (signature) alive.AddRange(InitialsCells());
+                if (signature) foreach (var c in PixelFont.Cells(letters)) alive.Add(c + new Vector2Int(2, 2));
                 else using (var fs = new Sim(N, N))
                 {
                     fs.SetRule(law.birth, law.survive);
@@ -654,8 +675,8 @@ namespace PointOfOrigin
                 // somewhere fully inside the stone: every covered cell rock, a rock roof above, nothing shared with another fossil
                 int gx = -1, gy = -1;
                 int xLo = 1, xHi = Mathf.Max(1, level.w - cw - 2);
-                if (signature) xLo = Mathf.Max(1, level.w - 28);
-                for (int attempt = 0; attempt < 200 && gx < 0; attempt++)
+                if (signature) xLo = Mathf.Max(1, level.w - (letters == "LC" ? 28 : 60));
+                for (int attempt = 0; attempt < 300 && gx < 0; attempt++)
                 {
                     int tx = xLo + rng.Next(Mathf.Max(1, xHi - xLo));
                     int ty = 2 + rng.Next(Mathf.Max(1, level.h - ch - 2));
@@ -668,6 +689,7 @@ namespace PointOfOrigin
                         }
                     if (ok) { gx = tx; gy = ty; }
                 }
+                if (signature) fossilLog.Add(gx < 0 ? $"{letters}: no room" : $"{letters} at {gx},{gy}");
                 if (gx < 0) continue;
                 for (int dy = -1; dy <= ch; dy++)
                     for (int dx = -1; dx <= cw; dx++)
@@ -714,28 +736,128 @@ namespace PointOfOrigin
                             Put(x0 + fx + dx, yTop - (fy + dy), pale, 0f);
                         }
                 }
+                // lettering joins at the corners too (the bowl of a B, the top of a C): bridge each corner-only touch with a pale 2x2
+                if (signature)
+                    foreach (var a in kept)
+                        foreach (var d in new[] { new Vector2Int(1, 1), new Vector2Int(1, -1) })
+                        {
+                            if (!kept.Contains(a + d) || kept.Contains(a + new Vector2Int(d.x, 0)) || kept.Contains(a + new Vector2Int(0, d.y))) continue;
+                            int fx = (a.x - minx) * Px, fy = (a.y - miny) * Px;
+                            int cx = d.x > 0 ? fx + Px - 1 : fx, cy = d.y > 0 ? fy + Px - 1 : fy;
+                            for (int oy = 0; oy <= 1; oy++)
+                                for (int ox = 0; ox <= 1; ox++)
+                                    Put(x0 + cx + ox * d.x, yTop - (cy + oy * d.y), 0.7f, 0f);
+                        }
             }
             fossilPx = pxList.ToArray();
             fossilCell = cellList.ToArray();
             fossilColor = colList.ToArray();
         }
 
-        /// <summary>The maker's initials, L and C, as fossil cells: three wide and five tall each, a cell apart.</summary>
-        static List<Vector2Int> InitialsCells()
+        // ------------------------------------------------------------------ the wall
+
+        /// <summary>What one generation of the spark law makes of some lettering: the cipher and the key, computed by the same simulation.</summary>
+        static List<Vector2Int> Sparked(string text, out int width)
         {
-            string[] rows =
-            {
-                "#...##",
-                "#..#..",
-                "#..#..",
-                "#..#..",
-                "###.##",
-            };
+            var plain = PixelFont.Cells(text, 3);
+            width = PixelFont.Width(text, 3) + 4;
+            int h = PixelFont.Height + 4;
             var cells = new List<Vector2Int>();
-            for (int y = 0; y < rows.Length; y++)
-                for (int x = 0; x < rows[y].Length; x++)
-                    if (rows[y][x] == '#') cells.Add(new Vector2Int(x + 2, y + 2));
+            using (var fs = new Sim(width, h))
+            {
+                fs.SetRule(Mask(1), 0u);
+                foreach (var c in plain) fs.Set(c.x + 2, c.y + 2, Sim.Alive);
+                fs.Step(1);
+                fs.Refresh();
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < width; x++)
+                        if (fs.Cells[y * width + x] == Sim.Alive) cells.Add(new Vector2Int(x, y));
+            }
             return cells;
+        }
+
+        void OpenWall()
+        {
+            if (wallCipher == null)
+            {
+                wallKeyPlain = PixelFont.Cells(WallKeyWord, 3);
+                for (int i = 0; i < wallKeyPlain.Count; i++) wallKeyPlain[i] += new Vector2Int(2, 2);
+                wallKeySparked = Sparked(WallKeyWord, out wallKeyW);
+                wallCipher = Sparked(WallAnswerLength, out wallCipherW);
+            }
+            wallTyped = "";
+            wallInitials = Wall.Mine;
+            wallUser = Wall.User;
+            wallNote = "";
+            wallStage = Wall.Solved && Wall.Word.Length > 0 ? (Wall.Mine.Length > 0 ? 2 : 1) : 0;
+            OpenPage(Overlay.Wall);
+        }
+
+        void WallSubmitAnswer()
+        {
+            var answer = wallTyped.Trim().ToLowerInvariant();
+            if (answer.Length == 0) return;
+            if (Wall.AnswerHash(answer) == WallAnswerHash)
+            {
+                Wall.MarkSolved(answer);
+                wallStage = 1;
+                wallNote = "That is what it says. Now press your own letters into it: up to three.";
+                sfx.Success();
+                sfx.DoorChime();
+            }
+            else
+            {
+                wallNote = "The wall does not say that. Read the key again: the spark took every letter the same way.";
+                wallTyped = "";
+                sfx.Blocked();
+            }
+        }
+
+        void WallPressInitials()
+        {
+            var s = Wall.Clean(wallInitials);
+            if (s.Length == 0) return;
+            Wall.SetMine(s);
+            wallStage = 2;
+            wallNote = $"{s} is pressed into the rock of the second chapter, in your copy. To put it on everyone's wall, type the GitHub account you will submit from, then share.";
+            sfx.Place();
+            sfx.Success();
+        }
+
+        void WallShare()
+        {
+            var s = Wall.Clean(wallInitials.Length > 0 ? wallInitials : Wall.Mine);
+            var user = Wall.CleanUser(wallUser);
+            if (s.Length == 0 || user.Length == 0 || Wall.Word.Length == 0) return;
+            Wall.SetUser(user);
+            Application.OpenURL(Wall.ShareUrl(s, user));
+            wallNote = $"A GitHub issue opens in your browser. Sign in as {user} and submit it as it is: the wall checks the proof against that account, then answers and closes the issue.";
+            sfx.Select();
+        }
+
+        /// <summary>Typing on the wall's page: letters and digits (and hyphens in an account name), Backspace, Enter to submit.</summary>
+        void WallTyping()
+        {
+            if (!InputBridge.AnyKeyPressed(out var key)) return;
+            string current = wallStage == 0 ? wallTyped : wallStage == 1 ? wallInitials : wallUser;
+            int max = wallStage == 0 ? 24 : wallStage == 1 ? 3 : 39;
+            if (key == Key.Backspace) { if (current.Length > 0) current = current.Substring(0, current.Length - 1); }
+            else if (key == Key.Enter || key == Key.NumpadEnter)
+            {
+                if (wallStage == 0) WallSubmitAnswer(); else if (wallStage == 1) WallPressInitials(); else WallShare();
+                return;
+            }
+            else
+            {
+                string name = key.ToString();
+                char c = '\0';
+                if (name.Length == 1 && char.IsLetter(name[0])) c = InputBridge.ShiftHeld ? name[0] : char.ToLowerInvariant(name[0]);
+                else if (name.StartsWith("Digit") && name.Length == 6) c = name[5];
+                else if (name.StartsWith("Numpad") && name.Length == 7 && char.IsDigit(name[6])) c = name[6];
+                else if (wallStage == 2 && key == Key.Minus) c = '-';
+                if (c != '\0' && current.Length < max) { current += c; sfx.Select(); }
+            }
+            if (wallStage == 0) wallTyped = current; else if (wallStage == 1) wallInitials = current; else wallUser = current;
         }
 
         static uint Mask(params int[] counts)
@@ -892,7 +1014,12 @@ namespace PointOfOrigin
 
             if (Paused)
             {
-                if (listening.HasValue)
+                if (overlay == Overlay.Wall)
+                {
+                    if (InputBridge.Pressed(GameAction.Menu)) Back();
+                    else WallTyping();
+                }
+                else if (listening.HasValue)
                 {
                     // the Controls page: the next key becomes the binding, Esc cancels
                     if (InputBridge.AnyKeyPressed(out var key))
@@ -1629,11 +1756,12 @@ namespace PointOfOrigin
             sfx.Select();
         }
 
-        /// <summary>Plant or take back a seed in the cell the wanderer stands in.</summary>
+        /// <summary>Plant or take back a seed in the cell the wanderer stands in; on the found secret, read the wall instead.</summary>
         void PlantHere()
         {
             var c = CellOf(PlayerCentre);
             if (!InBounds(c)) return;
+            if (c == secretCell && secretFound) { OpenWall(); return; }
             ToggleSeed(c);
         }
 
@@ -1862,6 +1990,8 @@ namespace PointOfOrigin
             solvedMask = 0;
             solved = 0;
             Achievements.ResetAll();
+            Wall.Reset();
+            PlayerPrefs.DeleteKey(KeySecret);
             secretFound = false;
             SavePrefs();
             sfx.Rewind();
@@ -2410,6 +2540,19 @@ namespace PointOfOrigin
                     Wide(ref y, "Back  [Esc]", Back);
                     break;
                 }
+                case Overlay.Wall:
+                {
+                    float y = Screen.height - 110f * s;
+                    float bw3 = 220f * s;
+                    if (wallStage == 0)
+                        buttons.Add(new Button { rect = new Rect(cx - bw3 - gap / 2f, y, bw3, bh), label = "Say it  [Enter]", act = WallSubmitAnswer, enabled = wallTyped.Length > 0, gold = true });
+                    else if (wallStage == 1)
+                        buttons.Add(new Button { rect = new Rect(cx - bw3 - gap / 2f, y, bw3, bh), label = "Press in  [Enter]", act = WallPressInitials, enabled = Wall.Clean(wallInitials).Length > 0, gold = true });
+                    else
+                        buttons.Add(new Button { rect = new Rect(cx - bw3 - gap / 2f, y, bw3, bh), label = "Share on GitHub  [Enter]", act = WallShare, enabled = Wall.CleanUser(wallUser).Length > 0, gold = true });
+                    buttons.Add(new Button { rect = new Rect(cx + gap / 2f, y, bw3, bh), label = "Back  [Esc]", act = Back, enabled = true });
+                    break;
+                }
             }
         }
 
@@ -2561,6 +2704,55 @@ namespace PointOfOrigin
                     Line("Laws", "The same law makes different shapes in different places: rock clips growth, and a bloom that reaches an ember puts it out.");
                     break;
                 }
+                case Overlay.Wall:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "THE WALL", stBanner);
+                    float cell = Mathf.Min(9f * s, page.width / (wallCipherW + 4f));
+                    void Draw(List<Vector2Int> cells, float x0, float y0, Color col)
+                    {
+                        foreach (var c in cells) Panel(new Rect(x0 + c.x * cell, y0 + c.y * cell, cell - 1f, cell - 1f), col);
+                    }
+                    float y = PageTop + 62f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 24f * s), "The spark law took every letter once: born beside exactly one, nothing survives. The key:", stRowValue);
+                    y += 30f * s;
+                    float keyW = wallKeyW * cell;
+                    Draw(wallKeyPlain, page.x, y, new Color(0.72f, 0.66f, 0.54f, 1f));
+                    Draw(wallKeySparked, page.x + keyW + 40f * s, y, new Color(0.31f, 0.71f, 0.74f, 1f));
+                    GUI.Label(new Rect(page.x + keyW * 2f + 60f * s, y + 2f * cell, page.width * 0.4f, 40f * s), "plain, then sparked", stRowValue);
+                    y += 9f * cell + 16f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 24f * s), "What the wall says, sparked:", stRowValue);
+                    y += 30f * s;
+                    Draw(wallCipher, page.x, y, new Color(0.31f, 0.71f, 0.74f, 1f));
+                    y += 9f * cell + 20f * s;
+                    string caret = ((int)(Time.time * 2f) & 1) == 0 ? "_" : " ";
+                    if (wallStage == 0)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.3f, 36f * s), "It says:", stRow);
+                        Panel(new Rect(page.x + page.width * 0.3f, y, page.width * 0.5f, 36f * s), new Color(0.12f, 0.14f, 0.2f, 1f));
+                        GUI.Label(new Rect(page.x + page.width * 0.3f + 12f * s, y, page.width * 0.5f, 36f * s), wallTyped.ToUpperInvariant() + caret, stRow);
+                        GUI.Label(new Rect(page.x, y + 40f * s, page.width, 24f * s), $"{WallAnswerLength.Length} letters. Type it, Enter to say it. Typing needs a keyboard.", stRowValue);
+                    }
+                    else
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.3f, 36f * s), wallStage == 1 ? "Your letters:" : "On the wall:", stRow);
+                        Panel(new Rect(page.x + page.width * 0.3f, y, page.width * 0.2f, 36f * s), new Color(0.12f, 0.14f, 0.2f, 1f));
+                        GUI.Label(new Rect(page.x + page.width * 0.3f + 12f * s, y, page.width * 0.2f, 36f * s), (wallStage == 1 ? wallInitials.ToUpperInvariant() + caret : Wall.Mine), stRow);
+                        GUI.Label(new Rect(page.x + page.width * 0.55f, y, page.width * 0.45f, 36f * s), $"{Wall.Names.Count} on the wall" + (Wall.Fetched ? "" : " (the shipped list; the shared one could not be fetched)"), stRowValue);
+                        if (wallStage == 2)
+                        {
+                            y += 44f * s;
+                            GUI.Label(new Rect(page.x, y, page.width * 0.3f, 36f * s), "GitHub account:", stRow);
+                            Panel(new Rect(page.x + page.width * 0.3f, y, page.width * 0.5f, 36f * s), new Color(0.12f, 0.14f, 0.2f, 1f));
+                            GUI.Label(new Rect(page.x + page.width * 0.3f + 12f * s, y, page.width * 0.5f, 36f * s), wallUser + caret, stRow);
+                            y += 40f * s;
+                            GUI.Label(new Rect(page.x, y, page.width, 48f * s), "The account you will submit from. The proof is made for that account alone.", stRowValue);
+                            y -= 84f * s;
+                        }
+                    }
+                    y += 70f * s + (wallStage == 2 ? 84f * s : 0f);
+                    if (wallNote.Length > 0) GUI.Label(new Rect(page.x, y, page.width, 48f * s), wallNote, stRowValue);
+                    break;
+                }
                 case Overlay.Achievements:
                 {
                     GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "ACHIEVEMENTS", stBanner);
@@ -2664,6 +2856,7 @@ namespace PointOfOrigin
                 else if (phase == Phase.Dead) sub = "";
                 else if (onSeed) sub = "you stand in your seed: move away before you grow";
                 else if (fetching && carried == 0 && seeds.Count < level.seeds) sub = pickupsLeft.Count > 0 ? "the seeds lie somewhere in the dark: find them" : "";
+                else if (secretFound && here == secretCell) sub = $"{L(GameAction.Plant)} reads the wall";
                 else if (attempts > 0) sub = $"attempt {attempts + 1}";
                 else sub = $"find where it began, stand there, press {L(GameAction.Plant)}";
                 sub += $"   lanterns {lives}";

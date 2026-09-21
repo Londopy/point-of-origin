@@ -1,0 +1,113 @@
+# The wall of initials. A player who reads the wall in Two Echoes gets a
+# prefilled issue "initials: XYZ" whose body carries a proof: the word and the
+# player's account name hashed together. This recomputes the proof from the
+# WALL_ANSWER secret and the issue's author, adds the initials to
+# docs/initials.txt (one line per account), and closes the issue. Every copy of
+# the game fetches that file at start-up. The word itself never appears here.
+name: Wall
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Issue title to try, e.g. 'initials: LC'"
+        required: true
+      body:
+        description: "Issue body to try, e.g. 'proof: <sha256>'"
+        required: true
+      author:
+        description: "Account to try it as"
+        required: true
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: wall
+  cancel-in-progress: false
+
+jobs:
+  press:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, 'initials:')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Check the proof and press the initials in
+        id: press
+        env:
+          TITLE: ${{ github.event.issue.title || inputs.title }}
+          BODY: ${{ github.event.issue.body || inputs.body }}
+          AUTHOR: ${{ github.event.issue.user.login || inputs.author }}
+          WALL_ANSWER: ${{ secrets.WALL_ANSWER }}
+        run: |
+          python3 - <<'EOF'
+          import hashlib, os, re, sys
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          title = os.environ["TITLE"].strip()
+          body = os.environ.get("BODY") or ""
+          author = os.environ["AUTHOR"].strip()
+          secret = (os.environ.get("WALL_ANSWER") or "").strip().lower()
+          if not secret:
+              print("::error::the WALL_ANSWER secret is not set"); sys.exit(1)
+          m = re.match(r"^initials:\s*([A-Za-z0-9]{1,3})\s*$", title)
+          if not m:
+              out.write("verdict=bad-title\n"); sys.exit(0)
+          initials = m.group(1).upper()
+          p = re.search(r"proof:\s*([0-9a-fA-F]{64})", body)
+          proof = p.group(1).lower() if p else ""
+          expected = hashlib.sha256(f"point-of-origin:{secret}:{author.lower()}".encode()).hexdigest()
+          if proof != expected:
+              out.write("verdict=wrong\n"); sys.exit(0)
+          # one line per GitHub account: "XYZ login"; a repeat from the same account replaces its line
+          path = "docs/initials.txt"
+          lines = [l.strip().split() for l in open(path, encoding="utf-8") if l.strip()] if os.path.exists(path) else []
+          verdict = "added"
+          kept = []
+          for parts in lines:
+              if len(parts) >= 2 and parts[1].lower() == author.lower():
+                  verdict = "already" if parts[0] == initials else "replaced"
+                  continue
+              kept.append(" ".join(parts[:2]))
+          kept.append(f"{initials} {author}")
+          if verdict != "already":
+              open(path, "w", encoding="utf-8", newline="\n").write("\n".join(kept) + "\n")
+          out.write(f"verdict={verdict}\ninitials={initials}\n")
+          print(f"{verdict}: {initials} {author}")
+          EOF
+
+      - name: Commit the wall
+        if: steps.press.outputs.verdict == 'added' || steps.press.outputs.verdict == 'replaced'
+        run: |
+          git config user.name "the wall"
+          git config user.email "wall@users.noreply.github.com"
+          git add docs/initials.txt
+          git commit -m "Wall: ${{ steps.press.outputs.initials }}"
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          exit 1
+
+      - name: Answer the issue
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          VERDICT: ${{ steps.press.outputs.verdict }}
+          INITIALS: ${{ steps.press.outputs.initials }}
+        run: |
+          case "$VERDICT" in
+            added)    MSG="Pressed in. $INITIALS is on the wall; every copy of the game picks it up at its next start." ;;
+            replaced) MSG="Pressed in. Your line on the wall now reads $INITIALS (one line per account)." ;;
+            already)  MSG="$INITIALS is already on the wall, under your account." ;;
+            wrong)    MSG="The proof does not match this account. In the game, the wall asks for the GitHub account you will submit from: make it this one, and read the wall again." ;;
+            *)        MSG="The title must be \`initials: XYZ\` (one to three letters or digits)." ;;
+          esac
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$MSG"
+          gh issue close "$NUMBER" --repo "$GITHUB_REPOSITORY"
