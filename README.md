@@ -2,12 +2,14 @@
 
 *You are shown how it ended. Find where it began.*
 
-A reverse cellular-automaton puzzle made for the Cal Poly Game Development
-Club's **World's First Game Jam** (September 2026, theme **ORIGIN**). Every
-level shows the aftermath of a simple growth law run for a few generations.
-You get the seeds the designer had, place them, press Grow, and watch. The
-ghost outline fills in gold where your growth matches and bleeds red where
-it does not. Match it exactly and you have found the origin.
+A reverse cellular-automaton puzzle with a wanderer, made for the Cal Poly
+Game Development Club's **World's First Game Jam** (September 2026, theme
+**ORIGIN**). You wake in the dark where something ended. Your lantern shows
+the ruins only around you, so you walk the world to learn the full shape of
+what a simple growth law left behind. Stand where you think it began, plant a
+seed, press Grow, and watch: the ghost outline fills in gold where your growth
+matches and bleeds red where it does not. Match it exactly and you have found
+the origin.
 
 ![Headwaters, generation 3 of 5](docs/screenshots/03_level10_growing.png)
 
@@ -49,9 +51,11 @@ fails, close Unity and run the build again.
 
 | Input | Action |
 | --- | --- |
-| Left click | Plant or remove a seed (planting past the limit replaces the oldest) |
+| Left click a cell | Walk there (the wanderer finds a way around rock); click the cell you stand on to plant or remove a seed |
+| WASD / arrows | Walk one cell at a time (hold to keep walking) |
+| Space | Plant or remove a seed where you stand (planting past the limit replaces the oldest) |
 | Right click | Remove a seed |
-| Space / Enter | Grow; while growing, finish instantly; after a win, next level |
+| Enter / G | Grow; while growing, finish instantly; after a win, next level |
 | R | Rewind to your seeds |
 | N | Skip the level |
 | V | Reveal the designer's origins (after two failed attempts) |
@@ -63,8 +67,8 @@ last solved level's origins growing.
 
 ## Levels
 
-Levels are plain text in `levels/`. `#` is rock, `o` an origin, and the tool
-grows the target for you:
+Levels are plain text in `levels/`. `#` is rock, `o` an origin, `s` where the
+wanderer wakes, and the tool grows the target for you:
 
 ```
 name Ember

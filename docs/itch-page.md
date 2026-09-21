@@ -5,18 +5,19 @@
 **Tagline:** You are shown how it ended. Find where it began.
 
 **Short description (for the jam listing):**
-A reverse cellular-automaton puzzle. Every level shows the aftermath of a simple
-growth law. Plant the seeds, press Grow, and match the ghost outline exactly to
-find the origin.
+You wake in the dark where something ended. Walk the ruins by lantern light,
+work out where it all began, plant the seed there, and grow it back.
 
 **Description:**
 
-Every pattern in *Point of Origin* grew from one or two seeds under a simple
-law: born next to exactly one neighbour, or alive only when the neighbour count
-is odd, or keep everything you make. You see the result. You get the seeds.
-Where did it start?
+Every pattern in *Point of Origin* grew from a few seeds under a simple law:
+born next to exactly one neighbour, or alive only when the neighbour count is
+odd, or keep everything you make. Something ended here, and you wake in the
+dark among its ruins.
 
-Plant your seeds on the grid, press Grow, and watch the generations unfold. Gold
+Your lantern shows only what is near you, so walk: click where you want to go
+and the wanderer finds a way around the rock. As the ruins reveal themselves,
+work out where it all began. Stand there, plant the seed, and press Grow. Gold
 where your growth matches the outline, red where it does not. Match it exactly
 and you have found the point of origin. Fifteen levels across four laws, from a
 single ripple to three springs behind a broken wall. Progress is saved, and a
@@ -24,8 +25,9 @@ tip appears after a failed attempt if you want one.
 
 **Controls:**
 
-- Left click: plant or remove a seed
-- Space: grow (again to finish instantly, again for the next level)
+- Click a cell: walk there (or WASD / arrows)
+- Space: plant or remove a seed where you stand
+- Enter: grow (again to finish instantly, again for the next level)
 - R: rewind to your seeds
 - N: skip a level
 - V: reveal the designer's origins after two failed attempts

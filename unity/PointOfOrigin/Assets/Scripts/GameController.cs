@@ -24,6 +24,9 @@ namespace PointOfOrigin
         const string KeyUnlocked = "po.unlocked";
         const string KeySolved = "po.solved";
         const string KeyMuted = "po.muted";
+        const float LanternRadius = 3f;       // cells revealed and lit around the wanderer
+        const float WalkSpeed = 11f;          // cells per second
+        const float KeyRepeat = 0.1f;         // seconds between steps while a direction key is held
 
         static Color32 Hex(string hex)
         {
@@ -47,6 +50,13 @@ namespace PointOfOrigin
         static readonly Color32 ColWrongEdge = Hex("e0566a");
         static readonly Color32 ColAfter = Hex("4d3a3c");
         static readonly Color32 ColReveal = Hex("ff5fd2");
+        static readonly Color32 ColUnknown = Hex("0b0d14");
+        static readonly Color32 ColUnknownEdge = Hex("0d1018");
+        static readonly Color32 ColRockDark = Hex("181c25");
+        static readonly Color32 ColLamp = Hex("ffd9a0");
+        static readonly Color32 ColHero = Hex("fff6dc");
+        static readonly Color32 ColHeroEdge = Hex("ffb757");
+        static readonly Vector2Int[] Dirs = { Vector2Int.left, Vector2Int.right, new Vector2Int(0, -1), new Vector2Int(0, 1) };
         static readonly Color32[] AgeRamp =
         {
             Hex("fff7de"), Hex("ffd166"), Hex("f4a259"), Hex("e76f51"), Hex("c0503f"), Hex("9a3f3a"),
@@ -73,6 +83,15 @@ namespace PointOfOrigin
         float[] diedAt;
         readonly List<Vector2Int> seeds = new List<Vector2Int>();
         HashSet<Vector2Int> answer = new HashSet<Vector2Int>();
+
+        // the wanderer: the cell it stands on, its drawn position, the walk it is on, and what its lantern has shown
+        Vector2Int hero;
+        Vector2 heroPos;
+        readonly List<Vector2Int> path = new List<Vector2Int>();
+        bool[] seen;
+        bool allSeen;
+        float keyTimer;
+        int stepParity;
 
         Texture2D tex;
         Color32[] px;
@@ -208,6 +227,12 @@ namespace PointOfOrigin
             bornAt = new float[n];
             diedAt = new float[n];
             for (int i = 0; i < n; i++) { bornAt[i] = -10f; diedAt[i] = -10f; }
+            seen = new bool[n];
+            allSeen = false;
+            path.Clear();
+            hero = StartCell();
+            heroPos = hero;
+            RevealAround(hero);
             seeds.Clear();
             answer = new HashSet<Vector2Int>(level.OriginCells());
             attempts = 0;
@@ -296,7 +321,8 @@ namespace PointOfOrigin
 
             var mouse = InputBridge.MousePosition;
             var gui = new Vector2(mouse.x, Screen.height - mouse.y);
-            hover = phase == Phase.Place ? CellAt(mouse) : new Vector2Int(-1, -1);
+            bool inWorld = phase == Phase.Place || phase == Phase.Growing || phase == Phase.Result;
+            hover = inWorld ? CellAt(mouse) : new Vector2Int(-1, -1);
             Layout();
 
             if (InputBridge.Clicked)
@@ -311,19 +337,34 @@ namespace PointOfOrigin
                 }
                 if (!hit)
                 {
+                    var c = hover;
                     switch (phase)
                     {
                         case Phase.Title: StartLevel(FirstUnsolved()); break;
-                        case Phase.Place: if (hover.x >= 0) ToggleSeed(hover); break;
-                        case Phase.Result: if (won) Next(); else Rewind(); break;
                         case Phase.Finished: EnterTitle(); break;
+                        case Phase.Place:
+                            if (c.x >= 0) { if (c == hero && path.Count == 0) ToggleSeed(hero); else WalkTo(c); }
+                            break;
+                        case Phase.Growing:
+                            if (c.x >= 0) WalkTo(c);
+                            break;
+                        case Phase.Result:
+                            if (c.x >= 0) WalkTo(c);
+                            else if (won) Next();
+                            else Rewind();
+                            break;
                     }
                 }
             }
             if (InputBridge.RightClicked && phase == Phase.Place && hover.x >= 0 && seeds.Contains(hover))
                 ToggleSeed(hover);
 
-            if (InputBridge.Pressed(Key.Space, KeyCode.Space) || InputBridge.Pressed(Key.Enter, KeyCode.Return)) Primary();
+            if (InputBridge.Pressed(Key.Space, KeyCode.Space))
+            {
+                if (phase == Phase.Place) { if (path.Count == 0) ToggleSeed(hero); }
+                else Primary();
+            }
+            if (InputBridge.Pressed(Key.Enter, KeyCode.Return) || InputBridge.Pressed(Key.G, KeyCode.G)) Primary();
             if (InputBridge.Pressed(Key.R, KeyCode.R) && (phase == Phase.Place || phase == Phase.Growing || phase == Phase.Result)) Rewind();
             if (InputBridge.Pressed(Key.N, KeyCode.N) && (phase == Phase.Place || phase == Phase.Result)) Skip();
             if (InputBridge.Pressed(Key.V, KeyCode.V) && CanReveal) Reveal();
@@ -332,6 +373,29 @@ namespace PointOfOrigin
             {
                 if (phase == Phase.Title) { if (!Application.isEditor) Application.Quit(); }
                 else EnterTitle();
+            }
+
+            if (inWorld)
+            {
+                var dir = Vector2Int.zero;
+                if (InputBridge.Held(Key.A, KeyCode.A) || InputBridge.Held(Key.LeftArrow, KeyCode.LeftArrow)) dir = Vector2Int.left;
+                else if (InputBridge.Held(Key.D, KeyCode.D) || InputBridge.Held(Key.RightArrow, KeyCode.RightArrow)) dir = Vector2Int.right;
+                else if (InputBridge.Held(Key.W, KeyCode.W) || InputBridge.Held(Key.UpArrow, KeyCode.UpArrow)) dir = new Vector2Int(0, -1);
+                else if (InputBridge.Held(Key.S, KeyCode.S) || InputBridge.Held(Key.DownArrow, KeyCode.DownArrow)) dir = new Vector2Int(0, 1);
+                if (dir != Vector2Int.zero)
+                {
+                    keyTimer -= Time.deltaTime;
+                    if (keyTimer <= 0f)
+                    {
+                        keyTimer = KeyRepeat;
+                        TryStep(dir);
+                    }
+                }
+                else
+                {
+                    keyTimer = 0f;
+                }
+                MoveHero();
             }
 
             if (phase == Phase.Growing)
@@ -359,6 +423,115 @@ namespace PointOfOrigin
             int y = level.h - 1 - fromBottom;
             if (x < 0 || y < 0 || x >= level.w || y >= level.h) return new Vector2Int(-1, -1);
             return new Vector2Int(x, y);
+        }
+
+        // ------------------------------------------------------------------ the wanderer
+
+        bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < level.w && c.y < level.h;
+        bool Open(Vector2Int c) => InBounds(c) && rock[c.y * level.w + c.x] != Sim.Rock;
+
+        /// <summary>The level's start cell, or the open cell nearest the centre.</summary>
+        Vector2Int StartCell()
+        {
+            var s = level.StartCell();
+            if (s.HasValue && Open(s.Value)) return s.Value;
+            var centre = new Vector2Int(level.w / 2, level.h / 2);
+            for (int r = 0; r < Mathf.Max(level.w, level.h); r++)
+                for (int dy = -r; dy <= r; dy++)
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r) continue;
+                        var c = centre + new Vector2Int(dx, dy);
+                        if (Open(c)) return c;
+                    }
+            return centre;
+        }
+
+        void RevealAround(Vector2Int c)
+        {
+            int r = Mathf.CeilToInt(LanternRadius);
+            float r2 = LanternRadius * LanternRadius + 0.5f;
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (dx * dx + dy * dy > r2) continue;
+                    var n = c + new Vector2Int(dx, dy);
+                    if (InBounds(n)) seen[n.y * level.w + n.x] = true;
+                }
+        }
+
+        /// <summary>Shortest four-way walk between two cells around rock, excluding the start. Empty when unreachable.</summary>
+        List<Vector2Int> FindPath(Vector2Int from, Vector2Int to)
+        {
+            var result = new List<Vector2Int>();
+            if (!Open(to) || from == to) return result;
+            int w = level.w, n = w * level.h;
+            var prev = new int[n];
+            for (int i = 0; i < n; i++) prev[i] = -1;
+            int fromIndex = from.y * w + from.x;
+            prev[fromIndex] = fromIndex;
+            var queue = new Queue<Vector2Int>();
+            queue.Enqueue(from);
+            while (queue.Count > 0)
+            {
+                var c = queue.Dequeue();
+                if (c == to) break;
+                foreach (var d in Dirs)
+                {
+                    var m = c + d;
+                    if (!Open(m)) continue;
+                    int mi = m.y * w + m.x;
+                    if (prev[mi] >= 0) continue;
+                    prev[mi] = c.y * w + c.x;
+                    queue.Enqueue(m);
+                }
+            }
+            int ti = to.y * w + to.x;
+            if (prev[ti] < 0) return result;
+            for (int i = ti; i != fromIndex; i = prev[i]) result.Add(new Vector2Int(i % w, i / w));
+            result.Reverse();
+            return result;
+        }
+
+        /// <summary>Walk to a cell. Mid-step, the walk continues from the cell being entered so the figure never snaps back.</summary>
+        void WalkTo(Vector2Int c)
+        {
+            var from = path.Count > 0 ? path[0] : hero;
+            if (c == from) return;
+            var p = FindPath(from, c);
+            if (p.Count == 0)
+            {
+                sfx.Blocked();
+                return;
+            }
+            var first = path.Count > 0 ? path[0] : (Vector2Int?)null;
+            path.Clear();
+            if (first.HasValue) path.Add(first.Value);
+            path.AddRange(p);
+        }
+
+        void TryStep(Vector2Int dir)
+        {
+            if (path.Count > 0) return;
+            var n = hero + dir;
+            if (Open(n)) path.Add(n);
+        }
+
+        void MoveHero()
+        {
+            if (path.Count == 0) return;
+            var next = path[0];
+            Vector2 goal = next;
+            heroPos = Vector2.MoveTowards(heroPos, goal, WalkSpeed * Time.deltaTime);
+            if ((heroPos - goal).sqrMagnitude < 1e-5f)
+            {
+                heroPos = goal;
+                hero = next;
+                path.RemoveAt(0);
+                RevealAround(hero);
+                stepParity ^= 1;
+                sfx.Step(stepParity);
+            }
         }
 
         /// <summary>The title screen replays the last solved level's origins growing, over and over.</summary>
@@ -415,6 +588,7 @@ namespace PointOfOrigin
         {
             LoadLevel(DemoLevel());
             phase = Phase.Title;
+            allSeen = true;
             demoStage = 0;
             demoTimer = 0f;
             DemoReset();
@@ -520,6 +694,7 @@ namespace PointOfOrigin
         void Reveal()
         {
             revealed = true;
+            allSeen = true;
             sfx.Reveal();
         }
 
@@ -569,9 +744,11 @@ namespace PointOfOrigin
 
             float now = Time.time;
             bool placing = phase == Phase.Place || (phase == Phase.Title && sim.Generation == 0);
+            bool lamp = phase != Phase.Title && phase != Phase.Finished;
             float pulse = 0.5f + 0.5f * Mathf.Sin(now * 2.4f);
             Color32 ghost = Color32.Lerp(ColGhost, ColGhostBright, pulse * 0.6f);
             float flash = 1f - Mathf.Clamp01((now - winAt) / 0.5f);
+            float reach = LanternRadius + 1.3f;
 
             for (int y = 0; y < level.h; y++)
             {
@@ -581,10 +758,33 @@ namespace PointOfOrigin
                     byte c = sim.Cells[i];
                     bool inTarget = target[i] == Sim.Alive;
                     bool isRock = rock[i] == Sim.Rock;
-                    bool hot = !isRock && hover.x == x && hover.y == y;
+                    bool alive = c == Sim.Alive;
+                    bool visible = allSeen || seen[i] || alive;
+                    bool hot = !isRock && visible && hover.x == x && hover.y == y;
+                    float light = 0f;
+                    if (lamp)
+                    {
+                        float dist = Vector2.Distance(new Vector2(x, y), heroPos);
+                        light = Mathf.Clamp01(1f - dist / reach);
+                        light *= light;
+                    }
 
-                    Color32 baseFill = isRock ? ColRock : ColOpen;
-                    Color32 baseEdge = isRock ? ColRockEdge : (inTarget ? ghost : ColOpenEdge);
+                    Color32 baseFill, baseEdge;
+                    if (!visible)
+                    {
+                        baseFill = isRock ? ColRockDark : ColUnknown;
+                        baseEdge = isRock ? ColRockDark : ColUnknownEdge;
+                    }
+                    else
+                    {
+                        baseFill = isRock ? ColRock : ColOpen;
+                        baseEdge = isRock ? ColRockEdge : (inTarget ? ghost : ColOpenEdge);
+                    }
+                    if (light > 0f)
+                    {
+                        baseFill = Color32.Lerp(baseFill, ColLamp, light * 0.28f);
+                        baseEdge = Color32.Lerp(baseEdge, ColLamp, light * 0.38f);
+                    }
                     if (hot)
                     {
                         baseFill = Lighten(baseFill, 0.18f);
@@ -593,19 +793,20 @@ namespace PointOfOrigin
                     PaintCell(x, y, baseFill, baseEdge, 0);
                     if (isRock) continue;
 
-                    if (c == Sim.Alive)
+                    if (alive)
                     {
                         Color32 fill, edge;
                         if (placing) { fill = ColSeed; edge = ColSeedEdge; }
                         else if (inTarget) { fill = AgeColor(sim.Ages[i]); edge = Lighten(fill, 0.35f); }
                         else { fill = ColWrong; edge = ColWrongEdge; }
                         if (flash > 0f && inTarget && !placing) fill = Lighten(fill, flash * 0.85f);
+                        if (light > 0f) fill = Color32.Lerp(fill, ColLamp, light * 0.12f);
                         if (hot) fill = Lighten(fill, 0.15f);
                         float a = (now - bornAt[i]) / PopSeconds;
                         int inset = a >= 1f ? 0 : Mathf.Clamp((int)Mathf.Lerp(3.99f, 0f, Mathf.Clamp01(a)), 0, 3);
                         PaintCell(x, y, fill, inset == 0 ? edge : fill, inset);
                     }
-                    else if (now - diedAt[i] < AfterglowSeconds)
+                    else if (visible && now - diedAt[i] < AfterglowSeconds)
                     {
                         float d = (now - diedAt[i]) / AfterglowSeconds;
                         int inset = Mathf.Clamp((int)Mathf.Lerp(0f, 3.99f, d), 0, 3);
@@ -614,8 +815,29 @@ namespace PointOfOrigin
                     if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
+            if (lamp) PaintHero(now);
             tex.SetPixels32(px);
             tex.Apply(false);
+        }
+
+        /// <summary>The wanderer: a small warm figure with a rounded outline, drawn at its interpolated position.</summary>
+        void PaintHero(float now)
+        {
+            int tw = tex.width, th = tex.height;
+            float bob = Mathf.Sin(now * 5f) * 0.6f;
+            int cx = Mathf.RoundToInt(heroPos.x * CellPx) + 3;
+            int cy = Mathf.RoundToInt((level.h - 1 - heroPos.y) * CellPx + 3 + bob);
+            for (int dy = -2; dy <= 2; dy++)
+            {
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    if (Mathf.Abs(dx) == 2 && Mathf.Abs(dy) == 2) continue;
+                    int x = cx + dx, y = cy + dy;
+                    if (x < 0 || y < 0 || x >= tw || y >= th) continue;
+                    bool rim = Mathf.Abs(dx) == 2 || Mathf.Abs(dy) == 2;
+                    px[y * tw + x] = rim ? ColHeroEdge : ColHero;
+                }
+            }
         }
 
         /// <summary>Fill a cell's 7x7 square, shrunk by <paramref name="inset"/> pixels on every side, with a 1px border.</summary>
@@ -691,18 +913,18 @@ namespace PointOfOrigin
             switch (phase)
             {
                 case Phase.Place:
-                    Add("Grow  [Space]", Grow, seeds.Count > 0);
+                    Add("Grow  [Enter]", Grow, seeds.Count > 0);
                     Add("Skip  [N]", Skip);
                     if (CanReveal) Add("Reveal  [V]", Reveal);
                     break;
                 case Phase.Growing:
-                    Add("Finish  [Space]", Primary);
+                    Add("Finish  [Enter]", Primary);
                     Add("Rewind  [R]", Rewind);
                     break;
                 case Phase.Result:
                     if (won)
                     {
-                        Add("Next  [Space]", Next);
+                        Add("Next  [Enter]", Next);
                     }
                     else
                     {
@@ -807,7 +1029,7 @@ namespace PointOfOrigin
                 string right = placingHud ? $"Seeds {seeds.Count} / {level.seeds}" : $"Generation {sim.Generation} / {level.steps}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
                 string sub = placingHud
-                    ? (attempts > 0 ? $"attempt {attempts + 1}" : "click a cell to plant a seed")
+                    ? (attempts > 0 ? $"attempt {attempts + 1}" : "walk to where it began, then press Space")
                     : $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
 
@@ -817,7 +1039,7 @@ namespace PointOfOrigin
                 GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
 
                 GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
-                    (muted ? "sound off   " : "") + "Space grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
+                    (muted ? "sound off   " : "") + "click or WASD walk   Space plant   Enter grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
             }
 
             DrawButtons(gui);
@@ -832,8 +1054,8 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 36f * s, Screen.width * 0.7f, 60f * s),
                         "You are shown how it ended. Find where it began.", stBody);
                     GUI.Label(new Rect(Screen.width * 0.1f, cy + 92f * s, Screen.width * 0.8f, 100f * s),
-                        "Every pattern grew from a few seeds under one simple law.\n" +
-                        "Plant your seeds, press Grow, and match the ghost outline exactly.", stBody);
+                        "You wake in the dark where something ended. Walk, and its ruins show themselves.\n" +
+                        "Stand where it began, plant the seed, and grow it back exactly.", stBody);
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(0, Screen.height * 0.74f - 30f * s, Screen.width, 24f * s),

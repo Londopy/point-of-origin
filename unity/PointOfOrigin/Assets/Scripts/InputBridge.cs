@@ -26,5 +26,12 @@ namespace PointOfOrigin
                 return Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame;
             return Input.GetKeyDown(legacy);
         }
+
+        public static bool Held(Key key, KeyCode legacy)
+        {
+            if (NewInput)
+                return Keyboard.current != null && Keyboard.current[key].isPressed;
+            return Input.GetKey(legacy);
+        }
     }
 }

@@ -23,8 +23,18 @@ namespace PointOfOrigin
         public string rock;     // w*h chars, '#' rock
         public string target;   // w*h chars, '#' alive
         public string origins;  // "x,y;x,y" the designer's answer
+        public string start;    // "x,y" where the wanderer wakes, or empty for the centre
 
         public byte[] RockCells() => Cells(rock, Sim.Rock);
+
+        public Vector2Int? StartCell()
+        {
+            if (string.IsNullOrEmpty(start)) return null;
+            var xy = start.Split(',');
+            if (xy.Length == 2 && int.TryParse(xy[0], out var x) && int.TryParse(xy[1], out var y))
+                return new Vector2Int(x, y);
+            return null;
+        }
         public byte[] TargetCells() => Cells(target, Sim.Alive);
 
         byte[] Cells(string text, byte value)

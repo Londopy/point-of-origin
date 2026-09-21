@@ -33,6 +33,8 @@ struct Level {
     seeds: i64
     rows: List(String)
     origins: List((i64, i64))
+    start: (i64, i64)
+    has_start: bool
     w: i64
     h: i64
 }
@@ -41,7 +43,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
     var lv = Level{
         .name = String.new(), .hint = String.new(), .tip = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
-        .w = 0, .h = 0,
+        .start = (0, 0), .has_start = false, .w = 0, .h = 0,
     }
     var in_map = false
     for line in text.lines() {
@@ -81,6 +83,10 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         }
         for c, x in row[..] {
             if c == 'o' or c == 'O' { lv.origins.append((x as i64, y as i64)) }
+            if c == 's' or c == 'S' {
+                lv.start = (x as i64, y as i64)
+                lv.has_start = true
+            }
         }
     }
     if lv.origins.len == 0 {
@@ -136,6 +142,7 @@ fn preview(lv: *Level, target: []u8, rock: []u8) {
             let alive = i < target.len and target[i] == '#'
             let is_rock = i < rock.len and rock[i] == '#'
             if is_rock { line.push_byte('X') }
+            else if lv.has_start and lv.start.0 == x and lv.start.1 == y { line.push_byte('S') }
             else if is_origin(lv, x, y) { line.push_byte(if alive { '@' } else { 'o' }) }
             else if alive { line.push_byte('#') }
             else { line.push_byte('.') }
@@ -207,6 +214,8 @@ fn main() -> u8 {
         json.set(&mut obj, "rock", json.string(rock_flat[..]))
         json.set(&mut obj, "target", json.string(target))
         json.set(&mut obj, "origins", json.string(seeds[..]))
+        let start = if lv.has_start { format("{},{}", .{lv.start.0, lv.start.1}) } else { String.new() }
+        json.set(&mut obj, "start", json.string(start[..]))
         json.push(&mut levels, obj)
         count += 1
         let solutions = num_of(&grown, "solutions")
