@@ -99,6 +99,14 @@ allowed; shipping late is not.
       becomes a pocket after the growth, and any seed or origin that a cell you
       can reach first cannot reach back (that is what caught chapters 3 to 5 in
       the physics replay).
+- [ ] First thing: **Controls page text is cut off** (Londo, 3:50 AM, after the
+      third build). Check the page at 1280x720 and full screen; the gamepad note
+      and the row labels are the suspects.
+- [ ] If there is time after publish: **character design**. A simple way to
+      make the wanderer yours: a few palette swaps (robe, lantern glow) and a
+      hat or two, chosen on a page in the menus and saved with progress. The
+      sprite is a Blender render, so recolours can be done in code on the
+      loaded texture rather than re-rendering.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
