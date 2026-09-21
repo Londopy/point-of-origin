@@ -17,7 +17,10 @@ namespace PointOfOrigin.EditorTools
         const string IconPath = "Assets/Icon/icon.png";
 
         [MenuItem("Point of Origin/Build Windows (x64)")]
-        public static void PerformBuild()
+        public static void PerformBuild() => PerformBuildTo(Output);
+
+        /// <summary>Build to another folder, for when a running player holds the usual one.</summary>
+        public static void PerformBuildTo(string output)
         {
             PlayerSettings.productName = "Point of Origin";
             PlayerSettings.companyName = "Londopy";
@@ -43,13 +46,13 @@ namespace PointOfOrigin.EditorTools
             var options = new BuildPlayerOptions
             {
                 scenes = new[] { "Assets/Scenes/SampleScene.unity" },
-                locationPathName = Output,
+                locationPathName = output,
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None,
             };
             var report = BuildPipeline.BuildPlayer(options);
             var summary = report.summary;
-            Debug.Log($"Point of Origin build: {summary.result}, {summary.totalSize / (1024 * 1024)} MB, {summary.totalErrors} errors -> {Path.GetFullPath(Output)}");
+            Debug.Log($"Point of Origin build: {summary.result}, {summary.totalSize / (1024 * 1024)} MB, {summary.totalErrors} errors -> {Path.GetFullPath(output)}");
             if (summary.result != BuildResult.Succeeded && Application.isBatchMode)
                 EditorApplication.Exit(1);
         }
