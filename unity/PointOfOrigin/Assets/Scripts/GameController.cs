@@ -2304,7 +2304,7 @@ namespace PointOfOrigin
                         });
                         y += rowH;
                     }
-                    y += rowH + 20f * s;   // the fixed Menu row and the note sit above these
+                    y += rowH + 52f * s;   // the fixed Menu row and the two note lines sit above these
                     buttons.Add(new Button { rect = new Rect(cx - bw - gap / 2f, y, bw, bh), label = "Reset to defaults", act = () => { InputBridge.ResetBindings(); listening = null; sfx.Rewind(); }, enabled = true });
                     buttons.Add(new Button { rect = new Rect(cx + gap / 2f, y, bw, bh), label = "Back  [Esc]", act = Back, enabled = true });
                     break;
