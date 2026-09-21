@@ -39,8 +39,8 @@ allowed; shipping late is not.
       the middle or the only place to stand"): chapters 5 to 10 now put each
       stone on the floor of a wide trench at a cliff, the cliff clips the
       growth (count generations from the open edge), Two Echoes cancels in the
-      middle, Origin's mesa is cut by a wall. Fossils of older growths at
-      parallax depth and drifting spores in the background.
+      middle, Origin's mesa is cut by a wall. Fossils of older growths pressed
+      into the rock (pale imprints, sediment rim) and drifting spores.
 - [x] commit, build, zip, stop. Sleep is part of the plan.
 
 ## Monday morning
