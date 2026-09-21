@@ -28,11 +28,14 @@ allowed; shipping late is not.
 - [x] **four more chapters** (ten now): Quench, Ashfall (vertical), Two
       Echoes, Origin. Growth quenches embers and embers bounce off growth.
       All ten pass the checker and solve from the designer's origins.
-- [ ] 10:30 to 11:30 pm: **first hand playthrough (Londo)**. Play chapters 1 to 10
-      with a notepad: does jumping feel right, is the stone reachable, did you
-      understand "plant, get clear, grow", where did you die and was it fair.
-      Hand the notes over; fixes land while you play the next chapter.
-- [ ] 11:30 pm: commit, build, zip, stop. Sleep is part of the plan.
+- [x] 10:30 to 11:30 pm: **first hand playthrough (Londo)**. Verdict: fun,
+      needs a tutorial and longer levels.
+- [x] **tutorial + longer chapters**: chapter 1 is a guided run (prompts keyed
+      to what you did, a beacon on the stone), How to Play page in the menus;
+      every chapter got a platforming approach and a run after the growth
+      (dips, fenced embers, seeds on ledges), Ashfall got a second stone.
+      Maps 56 to 100 wide, all pass the checker, one solution each.
+- [x] commit, build, zip, stop. Sleep is part of the plan.
 
 ## Monday morning
 

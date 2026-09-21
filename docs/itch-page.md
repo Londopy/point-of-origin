@@ -24,8 +24,9 @@ there. Ten chapters across four laws, from a single bloom over a chasm to a
 tall cave, a bar made by two crossed echoes, and a mesa grown around a pillar.
 Mind your feet: growth overgrows whoever stands inside it, the void takes
 whoever falls, and embers patrol the ruins, though a bloom that catches one
-puts it out. Three lanterns per chapter. Progress is saved, and a tip appears
-after a failed attempt if you want one.
+puts it out. Three lanterns per chapter. The first chapter walks you through
+the loop one prompt at a time. Progress is saved, and a tip appears after a
+failed attempt if you want one.
 
 **Controls** (rebindable on the Controls page; arrows, W and Enter always work):
 

@@ -75,11 +75,17 @@ Controls page, and the arrows, W and Enter always work as well.
 | M | Sound on or off |
 | Esc | Pause menu in a chapter (resume, restart, chapter select, settings, controls, credits, quit); quit from the title |
 
-## Menu, settings, controls
+## Tutorial, menu, settings, controls
 
-The title screen has the chapter select, Settings, Controls, Credits and Quit,
-and replays the last solved chapter's origins growing behind it. Esc in a
-chapter pauses the world and opens the same pages. Settings holds master and
+The first chapter is the tutorial: a prompt under the header tells you the
+one thing to do next (run, jump, reach the marked stone, plant, get clear,
+grow, cross) and moves on when you have done it, and the stone is marked
+through the dark. It runs until First Bloom has been solved once. How to Play
+in the menus keeps the loop in six lines.
+
+The title screen has the chapter select, How to play, Settings, Controls,
+Credits and Quit, and replays the last solved chapter's origins growing behind
+it. Esc in a chapter pauses the world and opens the same pages. Settings holds master and
 music volume (ten steps each), sound on or off, screen shake, fullscreen and a
 two-click progress reset. Controls lists every action with its key: click a
 key, press a new one, and if that key was already in use the two actions swap
@@ -122,8 +128,12 @@ growth, so a bloom in a pit is a slab and an echo on a floor is only its top
 half; the compiler grows the real target, so what you see is what you must
 match. An optional `tip` line is shown after the first failed attempt.
 Chapters 7 to 10 add the quench (a bloom fills an ember's pit), a tall cave
-with a vertical camera, the two-echo bar, and a finale where four generations
-of bloom around a pillar become a mesa.
+with a vertical camera and two stones, the two-echo bar, and a finale where
+four generations of bloom around a pillar become a mesa. Every chapter is a
+road, not just a puzzle: a platforming approach (dips with a floor, embers
+fenced between posts you jump over, seeds to fetch on ledges) leads to the
+stones, and a run with more of the same leads from the growth to the door.
+Maps are 56 to 100 cells wide.
 
 The level compiler also asks the CLI to count how many seed placements grow
 the same target (`origin_cli --solve`, a search over the open cells inside the

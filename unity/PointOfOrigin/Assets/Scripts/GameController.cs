@@ -17,7 +17,10 @@ namespace PointOfOrigin
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
-        enum Overlay { None, Menu, Settings, Controls, Credits }
+        enum Overlay { None, Menu, Help, Settings, Controls, Credits }
+
+        /// <summary>The first chapter walks the player through the loop, one prompt at a time, keyed to what they have done.</summary>
+        enum Tutorial { Off, Move, Jump, FindStone, Plant, GetClear, Grow, Cross }
 
         class Ember
         {
@@ -179,6 +182,9 @@ namespace PointOfOrigin
         bool confirmReset;
         float[] grain;             // Houdini-generated stone grain, tileable, replayed onto the rock
         int grainN;
+        Tutorial tut = Tutorial.Off;
+        float tutTimer;
+        int jumps;
         float demoTimer;
         int demoStage;
         string fatal;
@@ -679,6 +685,7 @@ namespace PointOfOrigin
                     if (pickupsLeft.Remove(cell)) { carried++; sfx.Success(); }
                     if (won && cell == exitCell) { Next(); return; }
                     UpdateEmbers(dt);
+                    if (tut != Tutorial.Off) UpdateTutorial(dt);
                 }
             }
 
@@ -763,6 +770,7 @@ namespace PointOfOrigin
                 jumpBuffer = 0f;
                 coyote = 0f;
                 grounded = false;
+                jumps++;
                 sfx.Jump();
             }
             if (!jumpHeld && pVel.y > 4f) pVel.y = 4f;   // let go early for a shorter hop
@@ -844,7 +852,7 @@ namespace PointOfOrigin
             var sum = Vector2.zero;
             foreach (var a in answer) sum += CellCentreWorld(a);
             var focus = sum / answer.Count;
-            focus.x += ViewHalfH * Mathf.Max(0.1f, cam.aspect) * 0.55f;
+            focus.x += ViewHalfH * Mathf.Max(0.1f, cam.aspect) * 0.75f;
             return focus;
         }
 
@@ -925,6 +933,9 @@ namespace PointOfOrigin
 
         void EnterTitle()
         {
+            overlay = Overlay.None;
+            listening = null;
+            tut = Tutorial.Off;
             LoadLevel(DemoLevel());
             phase = Phase.Title;
             allSeen = true;
@@ -946,6 +957,84 @@ namespace PointOfOrigin
         {
             phase = string.IsNullOrEmpty(level.intro) ? Phase.Play : Phase.Story;
             SnapCamera();   // the load happened under the old phase; look at the wanderer, not the title demo
+            tut = levelIndex == 0 && !Solved(0) ? Tutorial.Move : Tutorial.Off;
+            tutTimer = 0f;
+            jumps = 0;
+        }
+
+        // ------------------------------------------------------------------ tutorial
+
+        bool NearAnswer(float radius)
+        {
+            var c = PlayerCentre;
+            foreach (var a in answer) if (Vector2.Distance(CellCentreWorld(a), c) <= radius) return true;
+            return false;
+        }
+
+        /// <summary>Standing in or right beside the outline: where the growth will reach.</summary>
+        bool InsideTargetArea()
+        {
+            var c = CellOf(PlayerCentre);
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    var n = c + new Vector2Int(dx, dy);
+                    if (InBounds(n) && target[n.y * level.w + n.x] == Sim.Alive) return true;
+                }
+            return false;
+        }
+
+        void UpdateTutorial(float dt)
+        {
+            switch (tut)
+            {
+                case Tutorial.Move:
+                    if (Mathf.Abs(pVel.x) > 1f) tutTimer += dt;
+                    if (tutTimer > 0.5f) { tut = Tutorial.Jump; tutTimer = 0f; }
+                    break;
+                case Tutorial.Jump:
+                    if (jumps > 0) tut = Tutorial.FindStone;
+                    break;
+                case Tutorial.FindStone:
+                    if (seeds.Count > 0) tut = Tutorial.GetClear;
+                    else if (NearAnswer(1.6f)) tut = Tutorial.Plant;
+                    break;
+                case Tutorial.Plant:
+                    if (seeds.Count > 0) tut = Tutorial.GetClear;
+                    else if (!NearAnswer(3.5f)) tut = Tutorial.FindStone;
+                    break;
+                case Tutorial.GetClear:
+                    if (phase != Phase.Play) tut = Tutorial.Cross;
+                    else if (seeds.Count == 0) tut = Tutorial.Plant;
+                    else if (grounded && !InsideTargetArea()) tut = Tutorial.Grow;
+                    break;
+                case Tutorial.Grow:
+                    if (phase != Phase.Play) tut = Tutorial.Cross;
+                    else if (seeds.Count == 0) tut = Tutorial.Plant;
+                    else if (InsideTargetArea()) tut = Tutorial.GetClear;
+                    break;
+                case Tutorial.Cross:
+                    if (phase == Phase.Play) tut = seeds.Count > 0 ? Tutorial.GetClear : Tutorial.Plant;   // rewound
+                    break;
+            }
+        }
+
+        string TutorialText()
+        {
+            switch (tut)
+            {
+                case Tutorial.Move: return $"Run with {L(GameAction.Left)} and {L(GameAction.Right)}.";
+                case Tutorial.Jump: return $"Jump with {L(GameAction.Jump)}. Hold it to jump higher, let go early for a hop.";
+                case Tutorial.FindStone: return "Your lantern shows the outline of what grew here. It grew from one stone, down in the chasm. Go to the marked cell.";
+                case Tutorial.Plant: return $"Stand on the stone and press {L(GameAction.Plant)} to plant a seed. ({L(GameAction.Plant)} again takes it back.)";
+                case Tutorial.GetClear: return "Growth takes whoever stands inside it. Jump back up onto the rock, away from the outline.";
+                case Tutorial.Grow: return $"Press {L(GameAction.Grow)}. The seed grows back into the outline, and the growth is solid ground.";
+                case Tutorial.Cross:
+                    if (phase == Phase.Growing) return "Watch it grow: gold cells match the outline, red cells do not.";
+                    return won ? "Exact. The door is open: cross the bloom and walk to it."
+                               : $"Not exact. {L(GameAction.Rewind)} rewinds the growth and keeps your seed; move it and try again.";
+                default: return "";
+            }
         }
 
         void Die(string why)
@@ -968,6 +1057,7 @@ namespace PointOfOrigin
             for (int i = 0; i < seen.Length && i < keepSeen.Length; i++)
                 if (keepSeen[i]) { seen[i] = true; seenAt[i] = keepSeenAt[i]; }
             phase = Phase.Play;
+            if (tut != Tutorial.Off) tut = Tutorial.FindStone;
         }
 
         void Retry()
@@ -1337,6 +1427,9 @@ namespace PointOfOrigin
                     if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
+            // the tutorial's beacon on the stone, drawn even into the unexplored dark
+            if (tut == Tutorial.FindStone || tut == Tutorial.Plant)
+                foreach (var a in answer) PaintDot(a.x, a.y, pulse > 0.5f ? ColLamp : ColSeedEdge);
             PaintBursts(now);
             tex.SetPixels32(px);
             tex.Apply(false);
@@ -1504,8 +1597,8 @@ namespace PointOfOrigin
                     });
                 }
                 // the menu row under the chapters
-                string[] names = { "Settings", "Controls", "Credits", "Quit" };
-                Action[] acts = { () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
+                string[] names = { "How to play", "Settings", "Controls", "Credits", "Quit" };
+                Action[] acts = { () => OpenPage(Overlay.Help), () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
                 float mw = 150f * s, mh = 40f * s, mgap = 12f * s;
                 float mx = (Screen.width - (names.Length * mw + (names.Length - 1) * mgap)) / 2f;
                 float my = TitleRowY + 104f * s;
@@ -1576,6 +1669,7 @@ namespace PointOfOrigin
                     Wide(ref y, "Resume  [Esc]", CloseOverlay, true);
                     Wide(ref y, "Restart chapter", () => { CloseOverlay(); Retry(); });
                     Wide(ref y, "Chapter select", () => { CloseOverlay(); EnterTitle(); });
+                    Wide(ref y, "How to play", () => OpenPage(Overlay.Help));
                     Wide(ref y, "Settings", () => OpenPage(Overlay.Settings));
                     Wide(ref y, "Controls", () => OpenPage(Overlay.Controls));
                     Wide(ref y, "Credits", () => OpenPage(Overlay.Credits));
@@ -1631,6 +1725,7 @@ namespace PointOfOrigin
                     break;
                 }
                 case Overlay.Credits:
+                case Overlay.Help:
                 {
                     float y = Screen.height - 110f * s;
                     Wide(ref y, "Back  [Esc]", Back);
@@ -1742,6 +1837,24 @@ namespace PointOfOrigin
                         listening.HasValue ? "press the new key, or Esc to keep the old one" : "click a key to change it. The arrows, W and Enter always work as well.", stRowValue);
                     break;
                 }
+                case Overlay.Help:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "HOW TO PLAY", stBanner);
+                    float y = PageTop + 76f * s;
+                    void Line(string head, string body)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.22f, 52f * s), head, stRow);
+                        GUI.Label(new Rect(page.x + page.width * 0.22f, y, page.width * 0.78f, 52f * s), body, stRowValue);
+                        y += 58f * s;
+                    }
+                    Line("The outline", "Your lantern shows the ghost of something that grew from one or more stones under a simple law. Explore to see all of it.");
+                    Line("Plant", $"Find where it began, stand there and press {L(GameAction.Plant)}. Some chapters give you the seeds; in others they lie in the dark, so fetch them first.");
+                    Line("Get clear", "Growth takes whoever stands inside it. Embers burn, and the void takes whoever falls. Three lanterns per chapter.");
+                    Line("Grow", $"Press {L(GameAction.Grow)}. Gold cells match the outline, red cells do not. An exact match opens the door, and the growth is ground you can walk on.");
+                    Line("Try again", $"{L(GameAction.Rewind)} rewinds the growth and keeps your seeds. After two failed tries, {L(GameAction.Reveal)} reveals the origins. {L(GameAction.Skip)} skips a chapter.");
+                    Line("Laws", "The same law makes different shapes in different places: rock clips growth, and a bloom that reaches an ember puts it out.");
+                    break;
+                }
                 case Overlay.Credits:
                 {
                     GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "POINT OF ORIGIN", stBanner);
@@ -1833,7 +1946,17 @@ namespace PointOfOrigin
 
                 string hint = attempts > 0 && !string.IsNullOrEmpty(level.tip) ? "Tip: " + level.tip : level.hint;
                 float buttonsWidth = (Paused ? 3 : buttons.Count) * 180f * s + 40f * s;
-                GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
+                if (tut == Tutorial.Off)
+                    GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
+                else if (!Paused && phase != Phase.Dead)
+                {
+                    // the tutorial prompt: one instruction at a time, under the chapter header
+                    float pw = Mathf.Min(760f * s, Screen.width - 48f * s), ph = 66f * s;
+                    var r = new Rect((Screen.width - pw) / 2f, 96f * s, pw, ph);
+                    Panel(r, new Color(0.07f, 0.09f, 0.14f, 0.92f));
+                    Panel(new Rect(r.x, r.y, 5f * s, ph), new Color(0.98f, 0.85f, 0.45f, 1f));
+                    GUI.Label(new Rect(r.x + 20f * s, r.y, pw - 32f * s, ph), TutorialText(), stBody);
+                }
 
                 GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
                     (muted ? "sound off   " : "") +
@@ -1879,7 +2002,8 @@ namespace PointOfOrigin
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
-                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Enter to wake", stBody);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s),
+                        tut != Tutorial.Off ? "click or press Enter to wake. This first chapter shows you the way." : "click or press Enter to wake", stBody);
                     GUI.color = old;
                     break;
                 }
