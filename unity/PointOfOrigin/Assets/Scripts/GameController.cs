@@ -185,6 +185,13 @@ namespace PointOfOrigin
         Tutorial tut = Tutorial.Off;
         float tutTimer;
         int jumps;
+        // the background: fossils of older growths at parallax depth, and a few spores drifting in the air
+        readonly List<SpriteRenderer> fossils = new List<SpriteRenderer>();
+        readonly List<Vector2> fossilAnchors = new List<Vector2>();
+        readonly List<SpriteRenderer> spores = new List<SpriteRenderer>();
+        readonly List<Vector3> sporeState = new List<Vector3>();   // x, y, phase
+        const float FossilParallax = 0.35f;
+        const int SporeCount = 9;
         float demoTimer;
         int demoStage;
         string fatal;
@@ -521,8 +528,123 @@ namespace PointOfOrigin
                 worldSr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), Vector2.zero, CellPx);
             }
             TrackChanges();
+            MakeFossils();
             SnapCamera();
             Paint();
+        }
+
+        // ------------------------------------------------------------------ background
+
+        /// <summary>
+        /// Two or three fossils per chapter: growths of random laws from one or two
+        /// points, grown by the same Odin simulation, drawn as faint outlines far
+        /// behind the world. The ruins of older origins.
+        /// </summary>
+        void MakeFossils()
+        {
+            foreach (var f in fossils) if (f != null) Destroy(f.gameObject);
+            fossils.Clear();
+            fossilAnchors.Clear();
+            var rng = new System.Random(levelIndex * 7919 + 17);
+            int count = 2 + rng.Next(2);
+            (uint birth, uint survive, int steps)[] laws =
+            {
+                (Mask(1, 2, 3, 4), Mask(0, 1, 2, 3, 4, 5, 6, 7, 8), 2 + rng.Next(2)),
+                (Mask(1), Mask(1, 2, 3, 4, 5, 6, 7, 8), 3 + rng.Next(3)),
+                (Mask(1, 3, 5, 7), Mask(1, 3, 5, 7), 3 + rng.Next(3)),
+                (Mask(1), 0u, 1 + rng.Next(2)),
+                (Mask(2), Mask(2, 3), 4 + rng.Next(3)),
+            };
+            const int N = 24, Px = 4;
+            for (int k = 0; k < count; k++)
+            {
+                var law = laws[rng.Next(laws.Length)];
+                using (var fs = new Sim(N, N))
+                {
+                    fs.SetRule(law.birth, law.survive);
+                    fs.Set(N / 2, N / 2, Sim.Alive);
+                    if (rng.Next(3) == 0) fs.Set(N / 2 + 2 + rng.Next(2), N / 2 + rng.Next(3) - 1, Sim.Alive);
+                    fs.Step(law.steps);
+                    fs.Refresh();
+                    var t = new Texture2D(N * Px, N * Px, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                    var pixels = new Color32[N * Px * N * Px];
+                    var clear = new Color32(0, 0, 0, 0);
+                    for (int i = 0; i < pixels.Length; i++) pixels[i] = clear;
+                    var col = new Color32(ColGhost.r, ColGhost.g, ColGhost.b, 255);
+                    for (int y = 0; y < N; y++)
+                        for (int x = 0; x < N; x++)
+                        {
+                            if (fs.Cells[y * N + x] != Sim.Alive) continue;
+                            int x0 = x * Px, y0 = (N - 1 - y) * Px;
+                            for (int dy = 0; dy < Px - 1; dy++)
+                                for (int dx = 0; dx < Px - 1; dx++)
+                                    if (dx == 0 || dy == 0 || dx == Px - 2 || dy == Px - 2)
+                                        pixels[(y0 + dy) * N * Px + x0 + dx] = col;
+                        }
+                    t.SetPixels32(pixels);
+                    t.Apply(false);
+                    var go = new GameObject("Fossil " + k);
+                    var sr = go.AddComponent<SpriteRenderer>();
+                    // far away: a fossil cell is half a world cell or so, the whole thing a few cells wide
+                    float cell = 0.45f + (float)rng.NextDouble() * 0.3f;
+                    sr.sprite = Sprite.Create(t, new Rect(0, 0, N * Px, N * Px), new Vector2(0.5f, 0.5f), Px / cell);
+                    sr.sortingOrder = -7;
+                    sr.sharedMaterial = worldSr.sharedMaterial;
+                    sr.color = new Color(1f, 1f, 1f, 0.14f + (float)rng.NextDouble() * 0.08f);
+                    fossils.Add(sr);
+                    // spread along the chapter, in the upper air; anchors are in world units at parallax 1
+                    float ax = level.w * (0.15f + 0.7f * (k + (float)rng.NextDouble() * 0.8f) / count);
+                    float ay = level.h * (0.55f + 0.35f * (float)rng.NextDouble());
+                    fossilAnchors.Add(new Vector2(ax, ay));
+                }
+            }
+        }
+
+        static uint Mask(params int[] counts)
+        {
+            uint m = 0;
+            foreach (var c in counts) m |= 1u << c;
+            return m;
+        }
+
+        /// <summary>A few warm motes drifting up through the explored air, wrapping around the view.</summary>
+        void UpdateSpores(float dt)
+        {
+            float halfH = cam.orthographicSize, halfW = halfH * Mathf.Max(0.1f, cam.aspect);
+            if (spores.Count == 0)
+            {
+                var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+                tex.SetPixel(0, 0, Color.white);
+                tex.Apply(false);
+                var sprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), CellPx);
+                for (int i = 0; i < SporeCount; i++)
+                {
+                    var go = new GameObject("Spore");
+                    var sr = go.AddComponent<SpriteRenderer>();
+                    sr.sprite = sprite;
+                    sr.sortingOrder = -6;
+                    sr.sharedMaterial = worldSr.sharedMaterial;
+                    sr.color = new Color(1f, 0.9f, 0.7f, 0.45f);
+                    spores.Add(sr);
+                    sporeState.Add(new Vector3(camBase.x + UnityEngine.Random.Range(-halfW, halfW), camBase.y + UnityEngine.Random.Range(-halfH, halfH), UnityEngine.Random.Range(0f, 6.28f)));
+                }
+            }
+            float now = Time.time;
+            for (int i = 0; i < spores.Count; i++)
+            {
+                var s = sporeState[i];
+                s.y += 0.35f * dt;
+                s.x += Mathf.Sin(now * 0.6f + s.z) * 0.4f * dt;
+                if (s.y > camBase.y + halfH + 1f || Mathf.Abs(s.x - camBase.x) > halfW + 2f)
+                {
+                    s.x = camBase.x + UnityEngine.Random.Range(-halfW, halfW);
+                    s.y = camBase.y - halfH - 0.5f;
+                }
+                sporeState[i] = s;
+                spores[i].transform.position = new Vector3(s.x, s.y, 2f);
+                float tw = 0.22f + 0.16f * Mathf.Sin(now * 2.1f + s.z * 3f);
+                spores[i].color = new Color(1f, 0.9f, 0.7f, tw);
+            }
         }
 
         /// <summary>Every ember back on its starting cell: on load, and on every rewind (growth may have quenched some).</summary>
@@ -881,6 +1003,15 @@ namespace PointOfOrigin
             // parallax: the skylines slide slower than the world and sit just below the ground line
             if (farSr != null) farSr.transform.position = new Vector3(camBase.x * 0.75f - 24f, -1.5f, 4f);
             if (nearSr != null) nearSr.transform.position = new Vector3(camBase.x * 0.5f - 24f, -1.0f, 3f);
+            // the fossils drift at their own depth between the skylines and the world
+            for (int i = 0; i < fossils.Count; i++)
+            {
+                var a = fossilAnchors[i];
+                fossils[i].transform.position = new Vector3(
+                    a.x + (camBase.x - level.w / 2f) * FossilParallax,
+                    a.y + (camBase.y - level.h / 2f) * FossilParallax, 2.5f);
+            }
+            UpdateSpores(dt);
         }
 
         // ------------------------------------------------------------------ title demo

@@ -21,7 +21,9 @@ spot, plant the seed, get clear, and press Grow. The living cells rise as solid
 ground: gold where they match the outline, red where they do not. Match it
 exactly and the door opens, and the growth is the bridge that carries you
 there. Ten chapters across four laws, from a single bloom over a chasm to a
-tall cave, a bar made by two crossed echoes, and a mesa grown around a pillar.
+tall cave, two echoes that cancel each other, and a mesa grown against a wall.
+Early on the stone is where you can stand; later the cliffs cut the growth
+short and you have to count generations back from what is left.
 Mind your feet: growth overgrows whoever stands inside it, the void takes
 whoever falls, and embers patrol the ruins, though a bloom that catches one
 puts it out. Three lanterns per chapter. The first chapter walks you through

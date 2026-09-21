@@ -35,6 +35,12 @@ allowed; shipping late is not.
       every chapter got a platforming approach and a run after the growth
       (dips, fenced embers, seeds on ledges), Ashfall got a second stone.
       Maps 56 to 100 wide, all pass the checker, one solution each.
+- [x] **harder origins + backdrop** (Londo: "finding the origin was too easy,
+      the middle or the only place to stand"): chapters 5 to 10 now put each
+      stone on the floor of a wide trench at a cliff, the cliff clips the
+      growth (count generations from the open edge), Two Echoes cancels in the
+      middle, Origin's mesa is cut by a wall. Fossils of older growths at
+      parallax depth and drifting spores in the background.
 - [x] commit, build, zip, stop. Sleep is part of the plan.
 
 ## Monday morning

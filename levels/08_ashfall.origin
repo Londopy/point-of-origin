@@ -1,9 +1,9 @@
-// A tall cave: a ladder of ledges past a rising ember, a shelf, a pit with a stone and an ember, a second seed and a second pit, the door high on the far wall.
+// A tall cave: a ladder of ledges past a rising ember, a shelf, two pits with stones set against their far walls, the door high on the far wall.
 name Ashfall
 rule B1234/S012345678
 steps 3
 hint Climb the ledges; a seed lies on one of them, and an ember rises and falls between them. Above: a shelf, a pit with a stone and an ember, then a second seed and a second pit. Two blooms, one after the other, up to the door.
-tip Grow the first bloom to reach the ledge, fetch the second seed, plant in the second pit, climb out, rewind, and grow both from the ledge. Each bloom rises two cells above its rim.
+tip Each pit's bloom was cut by the pit's far wall: the stone is one cell from that wall, not in the middle. Grow the first, fetch the second seed, plant, climb out, rewind, grow both from the ledge.
 intro The cave climbs. Ledge by ledge, with an ember rising and falling in the dark between them. Somewhere above: a shelf, two pits, two stones.
 outro You climbed through the dark and grew a stair at the top of it. The way down is behind you now.
 map
@@ -20,9 +20,9 @@ map
 ...................................................#####
 ...................................k...............#####
 ...............................#############.......#####
-...............................#############.e.o...#####
+...............................#############.e...o.#####
 ............###########........#########################
-.......##...###########...eo...#########################
+.......##...###########..e...o.#########################
 ...k........############################################
 ...##.......############################################
 ............############################################
