@@ -7,7 +7,7 @@ tip A bloom is five wide. An eight-wide slab is two blooms three apart: the ston
 intro Two beginnings so close that their blooms fused. The road here has learned to bite: green pools, spikes, an ember with a short leash.
 outro Two seeds, one slab. Nothing that grows keeps to itself.
 say wake|The pool ahead is not water. Jump it.
-say seed|A seed. There will be two; this shape needed two.
+say seed|A seed. This ruin needs two: plant both before you grow, each where its own bloom began.
 say plant|One seed in. The other goes three cells from it, or the slab comes out wrong.
 say grow|Both at once. If it is red at either end, one of them is off by one.
 say found|Fused. Two blooms, one ground. Up you go.

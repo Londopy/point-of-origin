@@ -1773,19 +1773,19 @@ namespace PointOfOrigin
             {
                 case Tutorial.Move: return $"Run with {L(GameAction.Left)} and {L(GameAction.Right)}.";
                 case Tutorial.Jump: return $"Jump with {L(GameAction.Jump)}. Hold it to jump higher, let go early for a hop.";
-                case Tutorial.FindOutline: return "Your lantern shows the outline of something that grew here: the framed cells down in the chasm. Go down to it.";
-                case Tutorial.PlantAnywhere: return $"Stand anywhere on the chasm floor and press {plant} to plant a seed. Anywhere. We will see what grows.";
-                case Tutorial.GetClear: return "Growth takes whoever stands inside it. Climb back up onto the rock, clear of the outline.";
-                case Tutorial.GrowFirst: return $"Press {grow}. The seed grows for two generations.";
+                case Tutorial.FindOutline: return "Your lantern shows the outline of something that grew here: the framed cells down in the chasm. That is the ruin you will regrow. Go down to it.";
+                case Tutorial.PlantAnywhere: return $"A seed is a beginning: everything that grew here grew from one. Stand anywhere on the chasm floor and press {plant} to plant yours. Anywhere. We will see what grows.";
+                case Tutorial.GetClear: return "Growth is solid rock, and it takes whoever stands inside it. Climb back up onto the rock, clear of the outline.";
+                case Tutorial.GrowFirst: return $"Press {grow}. The seed grows under this chapter's law for two generations. Match the outline exactly and the door opens.";
                 case Tutorial.SeeResult:
                     if (phase == Phase.Growing) return "Watch: gold where the growth matches the outline, red where it grew outside it.";
-                    return won ? "Exact, first time. The door is open." : "Red cells grew where the outline is not, and the door stays shut. It has to be exact.";
-                case Tutorial.RewindIt: return $"Press {rewind} to rewind. The growth clears; your seed stays where you planted it.";
-                case Tutorial.TakeBack: return $"That was not the origin. Stand on your seed and press {plant} to take it back.";
-                case Tutorial.Reason: return "Two generations reach two cells in every direction, so a bloom is five wide, and it began in the middle: the cell on the stone, marked. Go there.";
-                case Tutorial.PlantRight: return $"Press {plant} here. This is the origin.";
-                case Tutorial.GetClear2: return "Now get clear again: up onto the rock, away from the outline.";
-                case Tutorial.GrowRight: return $"Press {grow}.";
+                    return won ? "Exact, first time. The door is open." : "Red cells grew where the outline is not, and the door stays shut. It has to be exact, and only a seed on the true origin grows the true shape.";
+                case Tutorial.RewindIt: return $"Press {rewind} to rewind. The growth clears; your seed stays where you planted it. Rewind costs nothing: use it whenever a growth comes out wrong.";
+                case Tutorial.TakeBack: return $"Wrong place, so the wrong shape. Stand on your seed and press {plant} to take it back.";
+                case Tutorial.Reason: return "Two generations reach two cells in every direction, so a bloom is five wide, and it began in the middle: the cell on the stone, marked. The origin is always where the shape began. Go there.";
+                case Tutorial.PlantRight: return $"Press {plant} here. This is the origin: a seed planted where the ruin began regrows it exactly.";
+                case Tutorial.GetClear2: return "Now get clear again: up onto the rock, away from the outline. Never grow while standing in it.";
+                case Tutorial.GrowRight: return $"Press {grow}. When the growth is exact, it becomes the ground to the door.";
                 case Tutorial.Cross:
                     if (phase == Phase.Growing) return "Gold all the way.";
                     return won ? "Exact. The door is open: cross the bloom and walk to it."
@@ -2870,12 +2870,13 @@ namespace PointOfOrigin
                         GUI.Label(new Rect(page.x + page.width * 0.22f, y, page.width * 0.78f, 52f * s), body, stRowValue);
                         y += 58f * s;
                     }
-                    Line("The outline", "Your lantern shows the ghost of something that grew from one or more stones under a simple law. Explore to see all of it.");
-                    Line("Plant", $"Find where it began, stand there and press {L(GameAction.Plant)}. Some chapters give you the seeds; in others they lie in the dark, so fetch them first.");
-                    Line("Get clear", "Growth takes whoever stands inside it. Embers burn, and the void takes whoever falls. Three lanterns per chapter.");
-                    Line("Grow", $"Press {L(GameAction.Grow)}. Gold cells match the outline, red cells do not. An exact match opens the door, and the growth is ground you can walk on.");
-                    Line("Try again", $"{L(GameAction.Rewind)} rewinds the growth and keeps your seeds. After two failed tries, {L(GameAction.Reveal)} reveals the origins. {L(GameAction.Skip)} skips a chapter.");
-                    Line("Laws", "The same law makes different shapes in different places: rock clips growth, and a bloom that reaches an ember puts it out.");
+                    Line("The outline", "Your lantern shows the ghost of something that grew here from one or more seeds, under the law written at the top of the screen. Explore to see all of it.");
+                    Line("Seeds", "A seed is a beginning: everything that grew here grew from one. Some chapters hand you the seeds; in others they lie in the dark, so fetch them first. The count at the top right says how many the ruin needs.");
+                    Line("Plant", $"Work out where the shape began, stand on that cell, press {L(GameAction.Plant)}. With two or three seeds, plant every one before you grow: each grows its own shape and they merge, as the ruin did.");
+                    Line("Get clear", "Growth is solid and takes whoever stands inside it, so step out of the outline before you grow. Embers, acid, spikes and vents kill; the void takes whoever falls. Three lanterns per chapter.");
+                    Line("Grow", $"Press {L(GameAction.Grow)}. Gold cells match the outline, red cells do not. An exact match opens the door, and the growth is ground you can walk on: it is your bridge.");
+                    Line("Rewind", $"{L(GameAction.Rewind)} clears a wrong growth and keeps your seeds where they are. Stand on a seed and press {L(GameAction.Plant)} to take it back and try another cell. After two failed tries {L(GameAction.Reveal)} shows the origins; {L(GameAction.Skip)} skips a chapter.");
+                    Line("Laws", "The same law makes different shapes in different places: rock clips growth, a post casts a shadow through it, and a bloom that reaches an ember puts it out.");
                     break;
                 }
                 case Overlay.Wall:

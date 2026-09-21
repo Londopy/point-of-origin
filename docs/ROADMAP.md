@@ -121,9 +121,16 @@ allowed; shipping late is not.
       button on the title (`po.deaths.<i>`, nothing until a lantern is lost).
       **Hunter embers** (glyph `h`, JSON `H`): pale, they turn toward the
       wanderer whenever they share its row; one each in Bent Echo, Two Echoes
-      and Origin. The Houdini slab backdrop was left out: seen head-on by an
-      orthographic camera it is a rectangle behind skylines that already do
-      that job, and it needed art time the deadline did not have.
+      and Origin. The **Houdini slab** followed on its own branch and was
+      merged: the diorama base, tilted and stretched, as a dark plateau band
+      behind the ruin skylines with its own parallax.
+- [x] (Monday 4:30 PM, Londo's fourth playthrough: "amazing") Two Echoes'
+      tunnel seed moved to the tunnel's far end and the spikes taken out of
+      the tunnel (a two-tall corridor cannot be jumped in; the vent inside it
+      is the hazard). The tutorial and How to play now say outright what a
+      seed is, why you grow, that rewind is free and keeps the seeds, and that
+      a multi-seed ruin needs every seed planted before one Grow; Fused
+      Bloom's lantern says it again when the first seed is picked up.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
