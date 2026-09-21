@@ -4,6 +4,8 @@ rule B1/S
 steps 3
 hint Three sparks this time. Where ring sets meet, the touching cells were never born.
 tip Each ring set is centred two cells diagonally from its spark. Two sparks sit on one row, the third below them.
+intro Three sparks. You have seen two touch; now three, and the silence between them is louder.
+outro Every ring is centred on a spark that is no longer there.
 map
 ...................
 ...................

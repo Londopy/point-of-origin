@@ -4,6 +4,8 @@ rule B1/S
 steps 3
 hint A different law now. Each cell lives for one generation and only lonely neighbours light up. Explore: the rings are out there.
 tip The four rings sit two cells diagonally from where the spark was. The spark cell itself is empty now.
+intro The law changes underfoot. Here nothing lived past its first breath, and only the lonely were born.
+outro A spark leaves rings. The spark itself is gone.
 map
 .............
 .............

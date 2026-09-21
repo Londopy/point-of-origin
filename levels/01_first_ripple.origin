@@ -4,6 +4,8 @@ rule B1/S012345678
 steps 2
 hint Everything here spread from one point. Walk there (click, or WASD), press Space to plant, then Grow.
 tip The shape is symmetric. Its centre is where it began.
+intro You wake on cold ground with a lantern in your hand and no memory of lighting it. Around you lies the shape of something that once spread. It had a beginning. Find it.
+outro The ground remembers. Where you planted the seed, it grew back exactly as it had.
 map
 ...........
 ...........

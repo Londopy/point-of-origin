@@ -4,6 +4,8 @@ rule B1/S012345678
 steps 5
 hint Two springs, one river, two fords. Trace each flood back to where it started.
 tip Each spring is the first ripple grown for five generations. Find both centres; the river only clips the edges.
+intro A river of stone with two fords. On each side, a spring that flooded for five generations.
+outro Rivers clip what they cannot stop. The springs still tell where they rose.
 map
 .........#.........
 .........#.........

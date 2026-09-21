@@ -13,7 +13,10 @@ namespace PointOfOrigin
     /// </summary>
     public class GameController : MonoBehaviour
     {
-        enum Phase { Title, Place, Growing, Result, Finished }
+        enum Phase { Title, Story, Place, Growing, Result, Finished }
+
+        const string Epilogue =
+            "Every origin found. The world grows again, and you, who were its last seed, walk on in the light.";
 
         const int CellPx = 8;                 // texture pixels per cell; the last row and column are the gap
         const float StepInterval = 0.24f;     // seconds per generation while growing
@@ -101,6 +104,9 @@ namespace PointOfOrigin
         bool allSeen;
         float keyTimer;
         int stepParity;
+        readonly List<Vector2Int> pickupsLeft = new List<Vector2Int>();  // seeds still lying in the world
+        int carried;                                                       // seeds in hand
+        bool fetching;                                                     // this level's seeds must be found first
 
         WorldView view;
         Camera cam;
@@ -217,6 +223,10 @@ namespace PointOfOrigin
             hero = StartCell();
             heroPos = hero;
             RevealAround(hero);
+            pickupsLeft.Clear();
+            pickupsLeft.AddRange(level.PickupCells());
+            fetching = pickupsLeft.Count > 0;
+            carried = fetching ? 0 : level.seeds;
             seeds.Clear();
             answer = new HashSet<Vector2Int>(level.OriginCells());
             attempts = 0;
@@ -320,6 +330,7 @@ namespace PointOfOrigin
                     switch (phase)
                     {
                         case Phase.Title: StartLevel(FirstUnsolved()); break;
+                        case Phase.Story: phase = Phase.Place; break;
                         case Phase.Finished: EnterTitle(); break;
                         case Phase.Place:
                             if (c.x >= 0) { if (c == hero && path.Count == 0) ToggleSeed(hero); else WalkTo(c); }
@@ -518,6 +529,11 @@ namespace PointOfOrigin
                 RevealAround(hero);
                 stepParity ^= 1;
                 sfx.Step(stepParity);
+                if (pickupsLeft.Remove(hero))
+                {
+                    carried++;
+                    sfx.Success();
+                }
             }
         }
 
@@ -564,6 +580,7 @@ namespace PointOfOrigin
             switch (phase)
             {
                 case Phase.Title: StartLevel(FirstUnsolved()); break;
+                case Phase.Story: phase = Phase.Place; break;
                 case Phase.Place: Grow(); break;
                 case Phase.Growing: while (phase == Phase.Growing) Advance(); break;
                 case Phase.Result: if (won) Next(); else Rewind(); break;
@@ -584,8 +601,14 @@ namespace PointOfOrigin
         void StartLevel(int index)
         {
             LoadLevel(index);
-            phase = Phase.Place;
+            BeginLevel();
             sfx.Select();
+        }
+
+        /// <summary>A level opens on its chapter card when it has one, otherwise straight into play.</summary>
+        void BeginLevel()
+        {
+            phase = string.IsNullOrEmpty(level.intro) ? Phase.Place : Phase.Story;
         }
 
         void ToggleSeed(Vector2Int c)
@@ -595,8 +618,14 @@ namespace PointOfOrigin
             if (seeds.Remove(c))
             {
                 sim.Set(c.x, c.y, Sim.Dead);
+                carried++;
                 TrackChanges();
                 sfx.Remove();
+                return;
+            }
+            if (carried <= 0)
+            {
+                sfx.Blocked();
                 return;
             }
             if (seeds.Count >= level.seeds)
@@ -604,8 +633,10 @@ namespace PointOfOrigin
                 var oldest = seeds[0];
                 seeds.RemoveAt(0);
                 sim.Set(oldest.x, oldest.y, Sim.Dead);
+                carried++;
             }
             seeds.Add(c);
+            carried--;
             sim.Set(c.x, c.y, Sim.Alive);
             TrackChanges();
             sfx.Place();
@@ -693,7 +724,7 @@ namespace PointOfOrigin
                 return;
             }
             LoadLevel(levelIndex + 1);
-            phase = Phase.Place;
+            BeginLevel();
         }
 
         void ToggleMute()
@@ -822,6 +853,18 @@ namespace PointOfOrigin
                     if (revealed && answer.Contains(new Vector2Int(x, y)))
                         view.Box(p.x - 0.14f, yTop, p.z - 0.14f, p.x + 0.14f, yTop + 0.16f, p.z + 0.14f, ColReveal);
                 }
+            }
+            // seeds lying in the world: small crystals that hover and pulse, only where the lantern has been
+            foreach (var k in pickupsLeft)
+            {
+                int i = k.y * level.w + k.x;
+                if (!(allSeen || seen[i])) continue;
+                var p = CellCentre(k.x, k.y);
+                float ybase = FloorTop + 0.16f + 0.05f * Mathf.Sin(now * 3f + k.x);
+                float glow = 0.5f + 0.5f * Mathf.Sin(now * 4f + k.y);
+                var col = Color32.Lerp(ColSeed, ColSeedEdge, glow);
+                view.Box(p.x - 0.11f, ybase, p.z - 0.11f, p.x + 0.11f, ybase + 0.22f, p.z + 0.11f, col);
+                view.Box(p.x - 0.06f, ybase + 0.22f, p.z - 0.06f, p.x + 0.06f, ybase + 0.34f, p.z + 0.06f, col);
             }
             if (lamp) BuildHero(now);
             view.Commit();
@@ -995,7 +1038,7 @@ namespace PointOfOrigin
             }
             if (level == null) return;
 
-            if (phase != Phase.Title && phase != Phase.Finished)
+            if (phase != Phase.Title && phase != Phase.Finished && phase != Phase.Story)
             {
                 // top left: level, then the law in plain words
                 GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
@@ -1005,11 +1048,15 @@ namespace PointOfOrigin
 
                 // top right: seeds or generation, then progress
                 bool placingHud = phase == Phase.Place;
-                string right = placingHud ? $"Seeds {seeds.Count} / {level.seeds}" : $"Generation {sim.Generation} / {level.steps}";
+                string right = placingHud
+                    ? (fetching ? $"Seeds {seeds.Count} / {level.seeds}   in hand {carried}" : $"Seeds {seeds.Count} / {level.seeds}")
+                    : $"Generation {sim.Generation} / {level.steps}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
-                string sub = placingHud
-                    ? (attempts > 0 ? $"attempt {attempts + 1}" : "walk to where it began, then press Space")
-                    : $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
+                string sub;
+                if (!placingHud) sub = $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
+                else if (fetching && carried == 0 && seeds.Count < level.seeds) sub = pickupsLeft.Count > 0 ? "the seeds lie somewhere in the dark: find them" : "";
+                else if (attempts > 0) sub = $"attempt {attempts + 1}";
+                else sub = "walk to where it began, then press Space";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
 
                 // bottom left: the hint, or the tip once an attempt has failed
@@ -1051,21 +1098,43 @@ namespace PointOfOrigin
                         (muted ? "sound off (M)" : "M sound") + "   Esc quit", stSmall);
                     break;
                 }
+                case Phase.Story:
+                {
+                    Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, 0.82f));
+                    float cy = Screen.height * 0.30f;
+                    GUI.Label(new Rect(0, cy - 40f * s, Screen.width, 26f * s), $"chapter {levelIndex + 1} of {set.levels.Length}", stSmallCentre);
+                    GUI.Label(new Rect(0, cy - 10f * s, Screen.width, 76f * s), level.name, stBanner);
+                    GUI.Label(new Rect(Screen.width * 0.2f, cy + 76f * s, Screen.width * 0.6f, 160f * s), level.intro, stBody);
+                    float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
+                    var old = GUI.color;
+                    GUI.color = new Color(1f, 1f, 1f, pulse);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to wake", stBody);
+                    GUI.color = old;
+                    break;
+                }
                 case Phase.Result:
                 {
                     // a failed result fades away after a moment so the mismatch underneath can be studied
                     float a = Mathf.Clamp01(resultTime * 4f);
                     if (!won) a *= 1f - Mathf.Clamp01((resultTime - 2.4f) / 0.6f);
                     if (a <= 0f) break;
-                    Panel(new Rect(0, Screen.height * 0.40f, Screen.width, 140f * s), new Color(0.04f, 0.05f, 0.07f, 0.8f * a));
+                    bool story = won && !string.IsNullOrEmpty(level.outro);
+                    float panelH = story ? 190f * s : 140f * s;
+                    Panel(new Rect(0, Screen.height * 0.38f, Screen.width, panelH), new Color(0.04f, 0.05f, 0.07f, 0.8f * a));
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, a);
                     string text = won ? "ORIGIN FOUND" : $"{Mathf.FloorToInt(match * 100f)}% match";
-                    GUI.Label(new Rect(0, Screen.height * 0.40f, Screen.width, 76f * s), text, stBanner);
+                    GUI.Label(new Rect(0, Screen.height * 0.38f, Screen.width, 76f * s), text, stBanner);
+                    float ly = Screen.height * 0.38f + 72f * s;
+                    if (story)
+                    {
+                        GUI.Label(new Rect(Screen.width * 0.15f, ly, Screen.width * 0.7f, 52f * s), level.outro, stBody);
+                        ly += 54f * s;
+                    }
                     string detail = won
-                        ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   Space or click for the next one"
+                        ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   Enter or click outside the world for the next one"
                         : $"{missing} missing, {extra} astray   -   R to rewind, then move your seeds";
-                    GUI.Label(new Rect(0, Screen.height * 0.40f + 72f * s, Screen.width, 40f * s), detail, stBody);
+                    GUI.Label(new Rect(0, ly, Screen.width, 40f * s), detail, stSmallCentre);
                     GUI.color = old;
                     break;
                 }
@@ -1076,8 +1145,9 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(0, cy - 60f * s, Screen.width, 100f * s), "EVERY ORIGIN FOUND", stTitle);
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
-                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 80f * s),
-                        $"{done} of {set.levels.Length} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stBody);
+                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 90f * s), Epilogue, stBody);
+                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 150f * s, Screen.width * 0.7f, 40f * s),
+                        $"{done} of {set.levels.Length} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stSmallCentre);
                     GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space for the menu", stBody);
                     break;
                 }

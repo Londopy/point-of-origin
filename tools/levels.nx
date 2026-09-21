@@ -28,11 +28,14 @@ struct Level {
     name: String
     hint: String
     tip: String
+    intro: String
+    outro: String
     rule: String
     steps: i64
     seeds: i64
     rows: List(String)
     origins: List((i64, i64))
+    pickups: List((i64, i64))
     start: (i64, i64)
     has_start: bool
     w: i64
@@ -41,9 +44,9 @@ struct Level {
 
 fn parse_level(text: []u8, path: []u8) -> !Level {
     var lv = Level{
-        .name = String.new(), .hint = String.new(), .tip = String.new(), .rule = String.from("B3/S23"),
+        .name = String.new(), .hint = String.new(), .tip = String.new(), .intro = String.new(), .outro = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
-        .start = (0, 0), .has_start = false, .w = 0, .h = 0,
+        .pickups = List((i64, i64)).new(), .start = (0, 0), .has_start = false, .w = 0, .h = 0,
     }
     var in_map = false
     for line in text.lines() {
@@ -62,6 +65,8 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         if key == "name" { lv.name = String.from(val) }
         else if key == "hint" { lv.hint = String.from(val) }
         else if key == "tip" { lv.tip = String.from(val) }
+        else if key == "intro" { lv.intro = String.from(val) }
+        else if key == "outro" { lv.outro = String.from(val) }
         else if key == "rule" { lv.rule = String.from(val) }
         else if key == "steps" { lv.steps = try val.parse_int(i64) }
         else if key == "seeds" { lv.seeds = try val.parse_int(i64) }
@@ -83,6 +88,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         }
         for c, x in row[..] {
             if c == 'o' or c == 'O' { lv.origins.append((x as i64, y as i64)) }
+            if c == 'k' or c == 'K' { lv.pickups.append((x as i64, y as i64)) }
             if c == 's' or c == 'S' {
                 lv.start = (x as i64, y as i64)
                 lv.has_start = true
@@ -107,14 +113,19 @@ fn rock_text(lv: *Level, sep: []u8) -> String {
     return out
 }
 
-/// The origins as `x,y;x,y`.
-fn seeds_text(lv: *Level) -> String {
+/// Cells as `x,y;x,y`.
+fn cells_text(cells: *List((i64, i64))) -> String {
     var out = String.new()
-    for o, i in lv.origins {
+    for o, i in cells.* {
         if i > 0 { out.append(";") }
         out.append(format("{},{}", .{o.0, o.1})[..])
     }
     return out
+}
+
+/// The origins as `x,y;x,y`.
+fn seeds_text(lv: *Level) -> String {
+    return cells_text(&lv.origins)
 }
 
 fn num_of(v: *json.Json, key: []u8) -> f64 {
@@ -132,6 +143,11 @@ fn is_origin(lv: *Level, x: i64, y: i64) -> bool {
     return false
 }
 
+fn is_pickup(lv: *Level, x: i64, y: i64) -> bool {
+    for o in lv.pickups { if o.0 == x and o.1 == y { return true } }
+    return false
+}
+
 /// Print the grown level: `X` rock, `o` origin, `@` origin still alive, `#` alive.
 fn preview(lv: *Level, target: []u8, rock: []u8) {
     println("  {}  rule {}  steps {}  seeds {}  ({}x{})", .{lv.name, lv.rule, lv.steps, lv.seeds, lv.w, lv.h})
@@ -143,6 +159,7 @@ fn preview(lv: *Level, target: []u8, rock: []u8) {
             let is_rock = i < rock.len and rock[i] == '#'
             if is_rock { line.push_byte('X') }
             else if lv.has_start and lv.start.0 == x and lv.start.1 == y { line.push_byte('S') }
+            else if is_pickup(lv, x, y) { line.push_byte('k') }
             else if is_origin(lv, x, y) { line.push_byte(if alive { '@' } else { 'o' }) }
             else if alive { line.push_byte('#') }
             else { line.push_byte('.') }
@@ -203,6 +220,8 @@ fn main() -> u8 {
         json.set(&mut obj, "name", json.string(lv.name[..]))
         json.set(&mut obj, "hint", json.string(lv.hint[..]))
         json.set(&mut obj, "tip", json.string(lv.tip[..]))
+        json.set(&mut obj, "intro", json.string(lv.intro[..]))
+        json.set(&mut obj, "outro", json.string(lv.outro[..]))
         json.set(&mut obj, "rule", json.string(lv.rule[..]))
         json.set(&mut obj, "solutions", json.number(num_of(&grown, "solutions")))
         json.set(&mut obj, "w", json.number(lv.w as f64))
@@ -216,6 +235,8 @@ fn main() -> u8 {
         json.set(&mut obj, "origins", json.string(seeds[..]))
         let start = if lv.has_start { format("{},{}", .{lv.start.0, lv.start.1}) } else { String.new() }
         json.set(&mut obj, "start", json.string(start[..]))
+        let pickups = cells_text(&lv.pickups)
+        json.set(&mut obj, "pickups", json.string(pickups[..]))
         json.push(&mut levels, obj)
         count += 1
         let solutions = num_of(&grown, "solutions")

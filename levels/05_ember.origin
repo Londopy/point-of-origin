@@ -4,6 +4,8 @@ rule B1/S
 steps 3
 hint Rock does not grow and does not count. The wall ate part of one ring.
 tip Three rings are whole and the wall bit the fourth. The origin is the centre of all four.
+intro A ring bitten by stone. Even sparks obey walls.
+outro The wall took its share and kept it.
 map
 ...............
 ...............

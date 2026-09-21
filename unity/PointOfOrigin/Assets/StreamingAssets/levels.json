@@ -4,6 +4,8 @@
       "name": "First Ripple",
       "hint": "Everything here spread from one point. Walk there (click, or WASD), press Space to plant, then Grow.",
       "tip": "The shape is symmetric. Its centre is where it began.",
+      "intro": "You wake on cold ground with a lantern in your hand and no memory of lighting it. Around you lies the shape of something that once spread. It had a beginning. Find it.",
+      "outro": "The ground remembers. Where you planted the seed, it grew back exactly as it had.",
       "rule": "B1/S012345678",
       "solutions": 1,
       "w": 11,
@@ -15,12 +17,15 @@
       "rock": ".........................................................................................................................",
       "target": "....................................#...#.......###........###........###.......#...#....................................",
       "origins": "5,5",
-      "start": "5,8"
+      "start": "5,8",
+      "pickups": ""
     },
     {
       "name": "Against the Wall",
       "hint": "Rock never changes, blocks your way, and nothing grows through it. Read the shape of what got past.",
       "tip": "The wall and the left edge clip the ripple, but its top and bottom are still symmetric: the origin is level with the gap.",
+      "intro": "Someone raised walls here, long ago, to keep the ripples in. The walls outlasted them.",
+      "outro": "Stone does not grow. That is why it is still here.",
       "rule": "B1/S012345678",
       "solutions": 1,
       "w": 13,
@@ -32,12 +37,15 @@
       "rock": ".................................#............#............#............#.........................#............#............#............#...............................",
       "target": ".......................................###.###......##...##......#.###.#........###........#.###.#......##...##......###.###.............................................",
       "origins": "3,6",
-      "start": "10,6"
+      "start": "10,6",
+      "pickups": ""
     },
     {
       "name": "Two Springs",
       "hint": "Two beginnings. Where the ripples met, the shape tells you where they started.",
       "tip": "Each ripple alone is the shape from the first level. Find two such centres.",
+      "intro": "Two beginnings, one ending. Whatever lived here met in the middle and became a single thing.",
+      "outro": "Two seeds, one shape. Nothing that meets stays separate.",
       "rule": "B1/S012345678",
       "solutions": 1,
       "w": 15,
@@ -49,12 +57,15 @@
       "rock": ".................................................................................................................................................................................................................................",
       "target": "...............###.###........##...##........#.###.#..........###..........#.###.#........##...#####.###.###.#####...##........#.###.#..........###..........#.###.#........##...##........###.###...............................",
       "origins": "3,4;10,9",
-      "start": "7,13"
+      "start": "7,13",
+      "pickups": ""
     },
     {
       "name": "Spark",
       "hint": "A different law now. Each cell lives for one generation and only lonely neighbours light up. Explore: the rings are out there.",
       "tip": "The four rings sit two cells diagonally from where the spark was. The spark cell itself is empty now.",
+      "intro": "The law changes underfoot. Here nothing lived past its first breath, and only the lonely were born.",
+      "outro": "A spark leaves rings. The spark itself is gone.",
       "rule": "B1/S",
       "solutions": 1,
       "w": 13,
@@ -66,12 +77,15 @@
       "rock": ".........................................................................................................................................................................",
       "target": "..........................................###.###......#.#.#.#......###.###...................###.###......#.#.#.#......###.###..........................................",
       "origins": "6,6",
-      "start": "1,11"
+      "start": "1,11",
+      "pickups": ""
     },
     {
       "name": "Ember",
       "hint": "Rock does not grow and does not count. The wall ate part of one ring.",
       "tip": "Three rings are whole and the wall bit the fourth. The origin is the centre of all four.",
+      "intro": "A ring bitten by stone. Even sparks obey walls.",
+      "outro": "The wall took its share and kept it.",
       "rule": "B1/S",
       "solutions": 1,
       "w": 15,
@@ -83,12 +97,15 @@
       "rock": "....................................................................#..............#..............#..............#..............#..............#..............#..................................................................",
       "target": "..............................................................###.##.........#.#.#..........###.##........................###.##.........#.#.#..........###.##...................................................................",
       "origins": "5,7",
-      "start": "12,7"
+      "start": "12,7",
+      "pickups": ""
     },
     {
       "name": "Twin Sparks",
       "hint": "Two sparks. Where their rings would overlap, the cells had too many neighbours to be born.",
       "tip": "Two sparks, six cells apart. The rings that would have touched lost their touching columns.",
+      "intro": "Two sparks, close enough to touch. Where they would have met, nothing was born at all.",
+      "outro": "Too many neighbours and the birth does not happen. Loneliness was the law.",
       "rule": "B1/S",
       "solutions": 1,
       "w": 17,
@@ -100,12 +117,15 @@
       "rock": ".................................................................................................................................................................................................................................................................................................",
       "target": ".......................................................................................###.##.##.###....#.#.#...#.#.#....###.##.##.###.....................###.##.##.###....#.#.#...#.#.#....###.##.##.###.......................................................................................",
       "origins": "5,8;11,8",
-      "start": "8,15"
+      "start": "8,15",
+      "pickups": ""
     },
     {
       "name": "Echo",
       "hint": "A parity law: alive next turn if the neighbour count is odd. One origin echoes outward.",
       "tip": "The origin sits at the middle of the small cross in the centre.",
+      "intro": "Deeper in, the law is stranger: a cell lives when its neighbours are odd in number. What lived here echoed.",
+      "outro": "An echo is the shape of its source, repeated and thinned.",
       "rule": "B1357/S1357",
       "solutions": 1,
       "w": 15,
@@ -117,12 +137,15 @@
       "rock": ".................................................................................................................................................................................................................................",
       "target": "................................................................##.#.##........#.....#..........###..........#.#.#.#..........###..........#.....#........##.#.##................................................................",
       "origins": "7,7",
-      "start": "2,2"
+      "start": "2,2",
+      "pickups": ""
     },
     {
       "name": "Interference",
       "hint": "Under this law two origins add like waves. Where both echoes land, they cancel out.",
       "tip": "Two echoes, four cells apart. The centre column is where they cancelled each other out.",
+      "intro": "Two echoes crossed here. Where both arrived they cancelled, as waves do.",
+      "outro": "Where two things agree completely they leave nothing. You are learning the grammar.",
       "rule": "B1357/S1357",
       "solutions": 1,
       "w": 17,
@@ -134,12 +157,15 @@
       "rock": ".................................................................................................................................................................................................................................................................................................",
       "target": "........................................................................................##.##.##.##......#...#.#...#........###.###........#.#.....#.#........###.###........#...#.#...#......##.##.##.##........................................................................................",
       "origins": "6,8;10,8",
-      "start": "8,2"
+      "start": "8,2",
+      "pickups": ""
     },
     {
       "name": "Coral",
       "hint": "Here nothing dies: every cell that is born stays. The rocks carved the shape.",
       "tip": "Nothing dies here, so the origin is still alive: it is the very heart of the coral.",
+      "intro": "Here nothing dies. Everything ever born is still here, packed against the rocks that shaped it.",
+      "outro": "The origin is still alive at the heart of it. Some things keep their beginning.",
       "rule": "B1/S12345678",
       "solutions": 1,
       "w": 15,
@@ -151,12 +177,15 @@
       "rock": "....................................................#...........#.....#...................................................................................#.....#...........#....................................................",
       "target": ".................................................#.....#.......#.##.##.#.......##...##........#.###.#..........#.#..........#.###.#........##...##.......#.##.##.#.......#.....#.................................................",
       "origins": "7,7",
-      "start": "12,12"
+      "start": "12,12",
+      "pickups": ""
     },
     {
       "name": "Headwaters",
       "hint": "Two springs, one river, two fords. Trace each flood back to where it started.",
       "tip": "Each spring is the first ripple grown for five generations. Find both centres; the river only clips the edges.",
+      "intro": "A river of stone with two fords. On each side, a spring that flooded for five generations.",
+      "outro": "Rivers clip what they cannot stop. The springs still tell where they rose.",
       "rule": "B1/S012345678",
       "solutions": 1,
       "w": 19,
@@ -168,12 +197,15 @@
       "rock": ".........#..................#..................#..................#..................#.....................................#..................#..................#..................#..................#..................#..................#.....................................#..................#..................#..................#..................#.........",
       "target": "...................###................##.................#.###.###............##...##............#.###.#..............###..............#.###.#.......###..##...##........###.###.###.###.###.###........##...##..###.......#.###.#..............###..............#.###.#............##...##............###.###.#.................##................###...................",
       "origins": "5,6;13,12",
-      "start": "9,5"
+      "start": "9,5",
+      "pickups": ""
     },
     {
       "name": "Trinity",
       "hint": "Three sparks this time. Where ring sets meet, the touching cells were never born.",
       "tip": "Each ring set is centred two cells diagonally from its spark. Two sparks sit on one row, the third below them.",
+      "intro": "Three sparks. You have seen two touch; now three, and the silence between them is louder.",
+      "outro": "Every ring is centred on a spark that is no longer there.",
       "rule": "B1/S",
       "solutions": 1,
       "w": 19,
@@ -185,12 +217,15 @@
       "rock": ".........................................................................................................................................................................................................................................................................................................................................................................",
       "target": "...........................................................###.##.##.###......#.#.#...#.#.#......###.##.##.###.........................###.##.##.###......#.#.#...#.#.#......####.....####.........#.#.#.#............###.###...............................###.###............#.#.#.#............###.###................................................................",
       "origins": "5,6;11,6;8,12",
-      "start": "9,17"
+      "start": "9,17",
+      "pickups": ""
     },
     {
       "name": "Fracture",
       "hint": "Rock cuts through this echo. Rock is never alive and never counts as a neighbour.",
       "tip": "The echo would be symmetric without the seam. Mirror the intact half to find the centre.",
+      "intro": "A seam of stone runs through an echo. Half of it is missing. Half is enough.",
+      "outro": "Mirror what survived and the lost half reappears.",
       "rule": "B1357/S1357",
       "solutions": 1,
       "w": 17,
@@ -202,12 +237,15 @@
       "rock": "................................................................................#...............#...............#...............................................................#...............#...............#................................................................................",
       "target": "..........................................................................................##.##............#...#..............##.##..........#.#.#.#..........##.##..............#...#............##.##..........................................................................................",
       "origins": "8,8",
-      "start": "2,14"
+      "start": "2,14",
+      "pickups": ""
     },
     {
       "name": "Tide Pools",
       "hint": "Two corals, and nothing dies. Where they grew into each other the shape is denser.",
       "tip": "Each origin is still alive at the heart of its own coral, six cells apart on one row.",
+      "intro": "Two corals grew into each other around a pair of rocks. Nothing here has ever died.",
+      "outro": "Their hearts still beat, six cells apart.",
       "rule": "B1/S12345678",
       "solutions": 1,
       "w": 17,
@@ -219,12 +257,15 @@
       "rock": ".............................................................................................#.....................................................................................................#.............................................................................................",
       "target": ".....................................................................#.............#...###.##.##.###....##...#.#...##....#.###...###.#......#.#...#.#......#.###...###.#....##...#.#...##....###.##.##.###...#.............#.....................................................................",
       "origins": "5,8;11,8",
-      "start": "8,15"
+      "start": "8,15",
+      "pickups": ""
     },
     {
       "name": "Lattice",
       "hint": "One origin, five generations of echo. The pattern repeats itself at every scale.",
       "tip": "Nine rings in a three-by-three lattice: the origin is the centre of the central ring.",
+      "intro": "One origin, five generations of echo, nine rings. The world repeating itself at every scale.",
+      "outro": "The centre of the centre. You are close now.",
       "rule": "B1357/S1357",
       "solutions": 1,
       "w": 19,
@@ -236,12 +277,15 @@
       "rock": ".........................................................................................................................................................................................................................................................................................................................................................................",
       "target": "................................................................................###.###.###........#.#.#.#.#.#........###.###.###...........................###.....###........#.#.....#.#........###.....###...........................###.###.###........#.#.#.#.#.#........###.###.###................................................................................",
       "origins": "9,9",
-      "start": "1,1"
+      "start": "1,1",
+      "pickups": ""
     },
     {
       "name": "Confluence",
       "hint": "Three springs. A wall with one gap divides them, and every ripple keeps what it makes.",
       "tip": "Two springs above the wall, one below it. The one below leaked up through the gap.",
+      "intro": "Three springs behind a broken wall. This is the last ruin, and the shape in it is one you know: it is the shape you woke inside.",
+      "outro": "You planted the seeds where the springs rose, and the world grew back around you. It began here. So did you.",
       "rule": "B1/S012345678",
       "solutions": -1,
       "w": 21,
@@ -253,7 +297,108 @@
       "rock": "........................................................................................................................................................................................................................####.####........................................................................................................................................................................................................................",
       "target": "##.....###.###.....###.......##.##.......#.###.###.#.#.###.###..##...##.....##...##..#.###.#.....#.###.#....###.........###....#.###.#.....#.###.#..##...##.....##...##..###.###.#.#.###.###.#.......##.##.......###...#.........#...##.....##.......##..........#.###.###.#............##...##..............#.###.#................###................#.###.#..............##...##............#.###.###.#..........##.......##..........###.....###.....",
       "origins": "4,5;16,5;10,15",
-      "start": "10,10"
+      "start": "10,10",
+      "pickups": ""
+    },
+    {
+      "name": "The Cistern",
+      "hint": "You woke without a seed. One lies in the dark behind the wall. Find it, then find where the ripple began.",
+      "tip": "The pocket in the corner has one way in, on its right side. The ripple's centre is the middle of its symmetric shape.",
+      "intro": "Past the last ruin you thought was last, the ground goes on. This time you wake empty-handed. Whatever was planted here was carried in from somewhere else.",
+      "outro": "A seed is a thing you carry before it is a thing you plant.",
+      "rule": "B1/S012345678",
+      "solutions": 1,
+      "w": 17,
+      "h": 17,
+      "birth": 2,
+      "survive": 511,
+      "steps": 3,
+      "seeds": 1,
+      "rock": "..........................................................................................................................................................................######................#................#................#.................................#................#...........",
+      "target": "........................................................###.###..........##...##..........#.###.#............###............#.###.#..........##...##..........###.###............................................................................................................................",
+      "origins": "8,6",
+      "start": "14,15",
+      "pickups": "2,14"
+    },
+    {
+      "name": "Two Lanterns",
+      "hint": "Two sparks lit this. Two seeds lie in the corners, one each side. Each wall has a single gap.",
+      "tip": "Each set of rings is centred two cells diagonally from its spark, and the two sparks share a row.",
+      "intro": "Two seeds this time, and they are not together. Whoever carried them came from both ends of the world.",
+      "outro": "You carried what they carried, and stood where they stood.",
+      "rule": "B1/S",
+      "solutions": 1,
+      "w": 19,
+      "h": 19,
+      "birth": 2,
+      "survive": 0,
+      "steps": 3,
+      "seeds": 2,
+      "rock": "..........................................................................................................................................................................................................................................................#...........#......#...........#.........................#...........#......#...........#......#...........#...",
+      "target": "...............................................................................###.##.##.###......#.#.#...#.#.#......###.##.##.###.........................###.##.##.###......#.#.#...#.#.#......###.##.##.###...........................................................................................................................................................",
+      "origins": "6,7;12,7",
+      "start": "9,17",
+      "pickups": "1,17;17,17"
+    },
+    {
+      "name": "Choir Stalls",
+      "hint": "The seed lies along this bottom row. The echo rose beyond the long wall, which is open at both ends.",
+      "tip": "The origin sits in the middle of the small cross at the echo's centre.",
+      "intro": "A long wall with the echo behind it and the seed before it. The wall is open at both ends, as walls that outlast their makers tend to be.",
+      "outro": "Odd numbers make the choir. The centre holds the note.",
+      "rule": "B1357/S1357",
+      "solutions": 1,
+      "w": 17,
+      "h": 17,
+      "birth": 170,
+      "survive": 170,
+      "steps": 3,
+      "seeds": 1,
+      "rock": "..............................................................................................................................................................................................................#############......................................................................",
+      "target": "........................................................##.#.##..........#.....#............###............#.#.#.#............###............#.....#..........##.#.##............................................................................................................................",
+      "origins": "8,6",
+      "start": "2,15",
+      "pickups": "8,15"
+    },
+    {
+      "name": "Reef Walk",
+      "hint": "Two corals, two seeds lying in the far corners. The wall between has a gap at each end.",
+      "tip": "Nothing dies under this law, so each origin is still alive at the heart of its coral, eight cells apart.",
+      "intro": "The corals here grew towards each other and never quite met. The seeds that started them were left where the reef ends.",
+      "outro": "What never dies still needs to have begun.",
+      "rule": "B1/S12345678",
+      "solutions": 1,
+      "w": 19,
+      "h": 19,
+      "birth": 2,
+      "survive": 510,
+      "steps": 4,
+      "seeds": 2,
+      "rock": "......................................................................................................................................................................................................................#########..........................................................................................................................................",
+      "target": "....................#...............#...###.###.###.###....##...##.##...##....#.###.#.#.###.#......#.#.....#.#......#.###.#.#.###.#....##...##.##...##....###.###.###.###...#...............#............................................................................................................................................................................",
+      "origins": "5,5;13,5",
+      "start": "9,16",
+      "pickups": "2,16;16,16"
+    },
+    {
+      "name": "Lantern's End",
+      "hint": "Three seeds lie along the bottom of the world, beyond a wall broken in two places. Three springs rose above it.",
+      "tip": "Two springs high on the left and right, one lower in the middle. The wall clipped the lowest one.",
+      "intro": "The last of the ground. Three seeds wait below a broken wall, and above it the largest shape you have seen. You already know whose it is.",
+      "outro": "Three springs, three seeds, one wanderer. The lantern goes out because it is no longer needed.",
+      "rule": "B1/S012345678",
+      "solutions": -1,
+      "w": 21,
+      "h": 21,
+      "birth": 2,
+      "survive": 511,
+      "steps": 5,
+      "seeds": 3,
+      "rock": ".......................................................................................................................................................................................................................................................................................................................................................................####.#######.####.................................................................",
+      "target": "###.....##.##.....#####.......#.#.......###.###.###...###.###.#..##...##...##...##....#.###.#...#.###.#......###.......###......#.###.#...#.###.#....##...##...##...##..#.###.###...###.###.###.................#####....###.###....###.......##...##..............#.###.#................###................#.###.#..............##...##............#.###.###.#...........#.......#...........###.....###...............................................",
+      "origins": "5,5;15,5;10,13",
+      "start": "10,15",
+      "pickups": "1,19;10,19;19,19"
     }
   ]
 }

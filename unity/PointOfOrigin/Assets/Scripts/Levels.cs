@@ -12,6 +12,8 @@ namespace PointOfOrigin
         public string name;
         public string hint;
         public string tip;      // shown after the first failed attempt
+        public string intro;    // the chapter card before the level
+        public string outro;    // the line after the origin is found
         public string rule;
         public int w;
         public int h;
@@ -24,8 +26,24 @@ namespace PointOfOrigin
         public string target;   // w*h chars, '#' alive
         public string origins;  // "x,y;x,y" the designer's answer
         public string start;    // "x,y" where the wanderer wakes, or empty for the centre
+        public string pickups;  // "x,y;x,y" seeds lying in the world; empty means the seeds are carried from the start
 
         public byte[] RockCells() => Cells(rock, Sim.Rock);
+
+        public List<Vector2Int> PickupCells() => ParseCells(pickups);
+
+        static List<Vector2Int> ParseCells(string text)
+        {
+            var list = new List<Vector2Int>();
+            if (string.IsNullOrEmpty(text)) return list;
+            foreach (var part in text.Split(';'))
+            {
+                var xy = part.Split(',');
+                if (xy.Length == 2 && int.TryParse(xy[0], out var x) && int.TryParse(xy[1], out var y))
+                    list.Add(new Vector2Int(x, y));
+            }
+            return list;
+        }
 
         public Vector2Int? StartCell()
         {
