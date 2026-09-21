@@ -2866,13 +2866,13 @@ namespace PointOfOrigin
                     float y = PageTop + 76f * s;
                     void Line(string head, string body)
                     {
-                        GUI.Label(new Rect(page.x, y, page.width * 0.22f, 52f * s), head, stRow);
-                        GUI.Label(new Rect(page.x + page.width * 0.22f, y, page.width * 0.78f, 52f * s), body, stRowValue);
-                        y += 58f * s;
+                        GUI.Label(new Rect(page.x, y, page.width * 0.22f, 64f * s), head, stRow);
+                        GUI.Label(new Rect(page.x + page.width * 0.22f, y, page.width * 0.78f, 64f * s), body, stRowValue);
+                        y += 66f * s;
                     }
                     Line("The outline", "Your lantern shows the ghost of something that grew here from one or more seeds, under the law written at the top of the screen. Explore to see all of it.");
-                    Line("Seeds", "A seed is a beginning: everything that grew here grew from one. Some chapters hand you the seeds; in others they lie in the dark, so fetch them first. The count at the top right says how many the ruin needs.");
-                    Line("Plant", $"Work out where the shape began, stand on that cell, press {L(GameAction.Plant)}. With two or three seeds, plant every one before you grow: each grows its own shape and they merge, as the ruin did.");
+                    Line("Seeds", "A seed is a beginning: everything that grew here grew from one. Some chapters hand you the seeds; in others they lie in the dark, so fetch them first. The top right says how many the ruin needs.");
+                    Line("Plant", $"Work out where the shape began, stand on that cell, press {L(GameAction.Plant)}. With two or three seeds, plant every one before you grow: each grows its own shape and they merge.");
                     Line("Get clear", "Growth is solid and takes whoever stands inside it, so step out of the outline before you grow. Embers, acid, spikes and vents kill; the void takes whoever falls. Three lanterns per chapter.");
                     Line("Grow", $"Press {L(GameAction.Grow)}. Gold cells match the outline, red cells do not. An exact match opens the door, and the growth is ground you can walk on: it is your bridge.");
                     Line("Rewind", $"{L(GameAction.Rewind)} clears a wrong growth and keeps your seeds where they are. Stand on a seed and press {L(GameAction.Plant)} to take it back and try another cell. After two failed tries {L(GameAction.Reveal)} shows the origins; {L(GameAction.Skip)} skips a chapter.");
