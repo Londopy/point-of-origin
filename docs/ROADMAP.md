@@ -55,7 +55,7 @@ allowed; shipping late is not.
       three-tall column three from its stone); trenches there are now eight
       wide with the stone two from the cliff, and all ten chapters pass.
       Hints proofread against the new geometry.
-- [x] (Sunday 12:20 to Monday ~2:30 AM) **the second-playthrough pass**
+- [x] (Monday 12:20 to 12:40 AM) **the second-playthrough pass**
       (Londo: fun, too easy, repetitive maps, origins too similar, not enough
       ways to die, tutorial does not explain completing the origin, rewind,
       E): hazards (acid, spikes, fire spouts, crumbling rock) as map glyphs;
