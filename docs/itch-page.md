@@ -18,8 +18,9 @@ Where did it start?
 
 Plant your seeds on the grid, press Grow, and watch the generations unfold. Gold
 where your growth matches the outline, red where it does not. Match it exactly
-and you have found the point of origin. Ten levels across four laws, from a
-single ripple to two springs on either side of a river.
+and you have found the point of origin. Fifteen levels across four laws, from a
+single ripple to three springs behind a broken wall. Progress is saved, and a
+tip appears after a failed attempt if you want one.
 
 **Controls:**
 
@@ -28,6 +29,7 @@ single ripple to two springs on either side of a river.
 - R: rewind to your seeds
 - N: skip a level
 - V: reveal the designer's origins after two failed attempts
+- M: sound on or off, Esc: menu
 
 **Made with:** Odin (simulation core, as a native DLL), Nexium (build pipeline,
 binding generator and level compiler), Unity 6 (C#). Made solo for CPGD's

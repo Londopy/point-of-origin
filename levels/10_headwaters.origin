@@ -3,6 +3,7 @@ name Headwaters
 rule B1/S012345678
 steps 5
 hint Two springs, one river, two fords. Trace each flood back to where it started.
+tip Each spring is the first ripple grown for five generations. Find both centres; the river only clips the edges.
 map
 .........#.........
 .........#.........

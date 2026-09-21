@@ -15,10 +15,15 @@ namespace PointOfOrigin
     {
         enum Phase { Title, Place, Growing, Result, Finished }
 
-        const int CellPx = 8;              // texture pixels per cell, the last row/column is the gap
-        const float StepInterval = 0.22f;  // seconds per generation while growing
+        const int CellPx = 8;                 // texture pixels per cell; the last row and column are the gap
+        const float StepInterval = 0.24f;     // seconds per generation while growing
         const float WinThreshold = 0.999f;
-        const int RevealAfter = 2;         // failed attempts before Reveal is offered
+        const int RevealAfter = 2;            // failed attempts before Reveal is offered
+        const float PopSeconds = 0.2f;        // a born cell grows to full size over this long
+        const float AfterglowSeconds = 0.4f;  // a dead cell fades out over this long
+        const string KeyUnlocked = "po.unlocked";
+        const string KeySolved = "po.solved";
+        const string KeyMuted = "po.muted";
 
         static Color32 Hex(string hex)
         {
@@ -27,16 +32,20 @@ namespace PointOfOrigin
         }
 
         static readonly Color32 ColBg = Hex("0a0c12");
+        static readonly Color32 ColBgCentre = Hex("161c2c");
+        static readonly Color32 ColBgEdge = Hex("06070b");
         static readonly Color32 ColGap = Hex("05060a");
         static readonly Color32 ColOpen = Hex("141824");
         static readonly Color32 ColOpenEdge = Hex("181d2b");
         static readonly Color32 ColRock = Hex("343a47");
         static readonly Color32 ColRockEdge = Hex("222733");
-        static readonly Color32 ColGhost = Hex("2f7d84");
+        static readonly Color32 ColGhost = Hex("2a6d74");
+        static readonly Color32 ColGhostBright = Hex("4fb4bd");
         static readonly Color32 ColSeed = Hex("6fe3ff");
         static readonly Color32 ColSeedEdge = Hex("b9f3ff");
         static readonly Color32 ColWrong = Hex("b8364a");
         static readonly Color32 ColWrongEdge = Hex("e0566a");
+        static readonly Color32 ColAfter = Hex("4d3a3c");
         static readonly Color32 ColReveal = Hex("ff5fd2");
         static readonly Color32[] AgeRamp =
         {
@@ -49,21 +58,28 @@ namespace PointOfOrigin
             public string label;
             public Action act;
             public bool enabled;
+            public bool gold;
         }
 
         LevelSet set;
         Level level;
         int levelIndex;
+        string lawText = "";
         Sim sim;
         byte[] rock;
         byte[] target;
+        byte[] prevCells;
+        float[] bornAt;
+        float[] diedAt;
         readonly List<Vector2Int> seeds = new List<Vector2Int>();
         HashSet<Vector2Int> answer = new HashSet<Vector2Int>();
 
         Texture2D tex;
         Color32[] px;
         SpriteRenderer sr;
+        SpriteRenderer bg;
         Camera cam;
+        Vector3 camBase;
         Sfx sfx;
 
         Phase phase = Phase.Title;
@@ -73,17 +89,27 @@ namespace PointOfOrigin
         bool won;
         int attempts;
         bool revealed;
+        int missing;
+        int extra;
         int solved;
         int skipped;
+        float winAt = -10f;
+        float shake;
+        int unlocked;
+        int solvedMask;
+        bool muted;
+        float demoTimer;
+        int demoStage;
         Vector2Int hover = new Vector2Int(-1, -1);
         string fatal;
 
         readonly List<Button> buttons = new List<Button>();
-        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stHint, stButton, stBanner, stBody;
+        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stSmallCentre, stHint, stButton, stBanner, stBody;
         Texture2D panelTex;
         int styledHeight;
 
         bool CanReveal => attempts >= RevealAfter && !revealed && (phase == Phase.Place || phase == Phase.Result);
+        bool Solved(int i) => (solvedMask & (1 << i)) != 0;
 
         // ------------------------------------------------------------------ setup
 
@@ -103,29 +129,41 @@ namespace PointOfOrigin
             cam.orthographic = true;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = ColBg;
-            cam.transform.position = new Vector3(0f, -0.4f, -10f);
-            // The template's volume profile asks for bloom; the game is flat colour and the player build strips the shader.
-            var extra = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
-            if (extra != null) extra.renderPostProcessing = false;
+            camBase = new Vector3(0f, -0.8f, -10f);
+            cam.transform.position = camBase;
+            var extraData = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            if (extraData != null) extraData.renderPostProcessing = false;
+
+            var shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default") ?? Shader.Find("Sprites/Default");
+
+            var back = new GameObject("Background");
+            bg = back.AddComponent<SpriteRenderer>();
+            bg.sortingOrder = -10;
+            bg.sprite = Sprite.Create(MakeVignette(128), new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f), 128f);
+            if (shader != null) bg.sharedMaterial = new Material(shader);
 
             var grid = new GameObject("Grid");
             sr = grid.AddComponent<SpriteRenderer>();
-            var shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default") ?? Shader.Find("Sprites/Default");
             if (shader != null) sr.sharedMaterial = new Material(shader);
+
+            unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
+            solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
+            muted = PlayerPrefs.GetInt(KeyMuted, 0) != 0;
+            sfx.SetMuted(muted);
+            sfx.StartAmbient();
 
             try
             {
                 Debug.Log($"Point of Origin: origin_sim.dll version {Sim.NativeVersion}");
                 set = Levels.Load();
-                LoadLevel(0);
+                unlocked = Mathf.Clamp(unlocked, 0, set.levels.Length - 1);
+                EnterTitle();
             }
             catch (Exception e)
             {
                 fatal = e.Message;
                 Debug.LogException(e);
-                return;
             }
-            phase = Phase.Title;
         }
 
         void OnDestroy()
@@ -134,23 +172,52 @@ namespace PointOfOrigin
             sim = null;
         }
 
+        static Texture2D MakeVignette(int size)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            float half = size / 2f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
+                    float d = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy) / 1.25f);
+                    float k = d * d * (3f - 2f * d);
+                    pixels[y * size + x] = Color32.Lerp(ColBgCentre, ColBgEdge, k);
+                }
+            }
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            return t;
+        }
+
         void LoadLevel(int index)
         {
-            levelIndex = index;
-            level = set.levels[index];
+            levelIndex = Mathf.Clamp(index, 0, set.levels.Length - 1);
+            level = set.levels[levelIndex];
+            lawText = Levels.Describe(level.birth, level.survive);
             sim?.Dispose();
             sim = new Sim(level.w, level.h);
             sim.SetRule((uint)level.birth, (uint)level.survive);
             rock = level.RockCells();
             target = level.TargetCells();
             sim.Load(rock);
+            int n = level.w * level.h;
+            prevCells = new byte[n];
+            bornAt = new float[n];
+            diedAt = new float[n];
+            for (int i = 0; i < n; i++) { bornAt[i] = -10f; diedAt[i] = -10f; }
             seeds.Clear();
             answer = new HashSet<Vector2Int>(level.OriginCells());
             attempts = 0;
             revealed = false;
             won = false;
             match = 0f;
+            missing = 0;
+            extra = 0;
             stepTimer = 0f;
+            winAt = -10f;
 
             int tw = level.w * CellPx, th = level.h * CellPx;
             if (tex == null || tex.width != tw || tex.height != th)
@@ -165,17 +232,48 @@ namespace PointOfOrigin
                 px = new Color32[tw * th];
                 sr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), new Vector2(0.5f, 0.5f), CellPx);
             }
+            TrackChanges();
             FitCamera();
-            phase = Phase.Place;
             Paint();
         }
 
         void FitCamera()
         {
             if (level == null || cam == null) return;
-            float margin = 2.6f;
-            float need = Mathf.Max(level.h / 2f + margin, (level.w / 2f + margin) / Mathf.Max(0.1f, cam.aspect));
-            cam.orthographicSize = need;
+            // The grid takes about three quarters of the shorter screen axis, leaving the HUD bands clear;
+            // on the title screen it sits smaller behind the text.
+            float aspect = Mathf.Max(0.1f, cam.aspect);
+            float size = Mathf.Max((level.h / 2f + 1.5f) / 0.74f, (level.w / 2f + 1.5f) / 0.74f / aspect);
+            if (phase == Phase.Title) size *= 1.45f;
+            cam.orthographicSize = size;
+            if (bg != null)
+            {
+                bg.transform.position = new Vector3(camBase.x, camBase.y, 5f);
+                bg.transform.localScale = new Vector3(2f * cam.orthographicSize * aspect * 1.04f, 2f * cam.orthographicSize * 1.04f, 1f);
+            }
+        }
+
+        int FirstUnsolved()
+        {
+            for (int i = 0; i < set.levels.Length; i++)
+                if (i <= unlocked && !Solved(i)) return i;
+            return Mathf.Min(unlocked, set.levels.Length - 1);
+        }
+
+        int DemoLevel()
+        {
+            int best = 0;
+            for (int i = 0; i < set.levels.Length; i++)
+                if (Solved(i)) best = i;
+            return best;
+        }
+
+        void SavePrefs()
+        {
+            PlayerPrefs.SetInt(KeyUnlocked, unlocked);
+            PlayerPrefs.SetInt(KeySolved, solvedMask);
+            PlayerPrefs.SetInt(KeyMuted, muted ? 1 : 0);
+            PlayerPrefs.Save();
         }
 
         // ------------------------------------------------------------------ loop
@@ -184,6 +282,17 @@ namespace PointOfOrigin
         {
             if (fatal != null || sim == null) return;
             FitCamera();
+
+            if (shake > 0f)
+            {
+                shake -= Time.deltaTime;
+                var o = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, shake) * 0.6f;
+                cam.transform.position = camBase + new Vector3(o.x, o.y, 0f);
+            }
+            else
+            {
+                cam.transform.position = camBase;
+            }
 
             var mouse = InputBridge.MousePosition;
             var gui = new Vector2(mouse.x, Screen.height - mouse.y);
@@ -204,10 +313,10 @@ namespace PointOfOrigin
                 {
                     switch (phase)
                     {
-                        case Phase.Title: Begin(); break;
+                        case Phase.Title: StartLevel(FirstUnsolved()); break;
                         case Phase.Place: if (hover.x >= 0) ToggleSeed(hover); break;
                         case Phase.Result: if (won) Next(); else Rewind(); break;
-                        case Phase.Finished: Restart(); break;
+                        case Phase.Finished: EnterTitle(); break;
                     }
                 }
             }
@@ -215,10 +324,15 @@ namespace PointOfOrigin
                 ToggleSeed(hover);
 
             if (InputBridge.Pressed(Key.Space, KeyCode.Space) || InputBridge.Pressed(Key.Enter, KeyCode.Return)) Primary();
-            if (InputBridge.Pressed(Key.R, KeyCode.R) && phase != Phase.Title && phase != Phase.Finished) Rewind();
+            if (InputBridge.Pressed(Key.R, KeyCode.R) && (phase == Phase.Place || phase == Phase.Growing || phase == Phase.Result)) Rewind();
             if (InputBridge.Pressed(Key.N, KeyCode.N) && (phase == Phase.Place || phase == Phase.Result)) Skip();
             if (InputBridge.Pressed(Key.V, KeyCode.V) && CanReveal) Reveal();
-            if (InputBridge.Pressed(Key.Escape, KeyCode.Escape) && !Application.isEditor) Application.Quit();
+            if (InputBridge.Pressed(Key.M, KeyCode.M)) ToggleMute();
+            if (InputBridge.Pressed(Key.Escape, KeyCode.Escape))
+            {
+                if (phase == Phase.Title) { if (!Application.isEditor) Application.Quit(); }
+                else EnterTitle();
+            }
 
             if (phase == Phase.Growing)
             {
@@ -228,6 +342,10 @@ namespace PointOfOrigin
                     stepTimer -= StepInterval;
                     Advance();
                 }
+            }
+            else if (phase == Phase.Title)
+            {
+                Demo();
             }
             if (phase == Phase.Result) resultTime += Time.deltaTime;
             Paint();
@@ -243,23 +361,70 @@ namespace PointOfOrigin
             return new Vector2Int(x, y);
         }
 
+        /// <summary>The title screen replays the last solved level's origins growing, over and over.</summary>
+        void Demo()
+        {
+            demoTimer += Time.deltaTime;
+            switch (demoStage)
+            {
+                case 0:
+                    if (demoTimer > 1.0f) { demoStage = 1; demoTimer = 0f; }
+                    break;
+                case 1:
+                    if (demoTimer > 0.5f)
+                    {
+                        demoTimer = 0f;
+                        sim.Step(1);
+                        TrackChanges();
+                        if (sim.Generation >= level.steps) demoStage = 2;
+                    }
+                    break;
+                default:
+                    if (demoTimer > 2.2f)
+                    {
+                        demoTimer = 0f;
+                        DemoReset();
+                        demoStage = 0;
+                    }
+                    break;
+            }
+        }
+
+        void DemoReset()
+        {
+            sim.ClearLife();
+            foreach (var a in answer) sim.Set(a.x, a.y, Sim.Alive);
+            TrackChanges();
+        }
+
         // ------------------------------------------------------------------ actions
 
         void Primary()
         {
             switch (phase)
             {
-                case Phase.Title: Begin(); break;
+                case Phase.Title: StartLevel(FirstUnsolved()); break;
                 case Phase.Place: Grow(); break;
                 case Phase.Growing: while (phase == Phase.Growing) Advance(); break;
                 case Phase.Result: if (won) Next(); else Rewind(); break;
-                case Phase.Finished: Restart(); break;
+                case Phase.Finished: EnterTitle(); break;
             }
         }
 
-        void Begin()
+        void EnterTitle()
         {
+            LoadLevel(DemoLevel());
+            phase = Phase.Title;
+            demoStage = 0;
+            demoTimer = 0f;
+            DemoReset();
+        }
+
+        void StartLevel(int index)
+        {
+            LoadLevel(index);
             phase = Phase.Place;
+            sfx.Select();
         }
 
         void ToggleSeed(Vector2Int c)
@@ -269,6 +434,7 @@ namespace PointOfOrigin
             if (seeds.Remove(c))
             {
                 sim.Set(c.x, c.y, Sim.Dead);
+                TrackChanges();
                 sfx.Remove();
                 return;
             }
@@ -280,6 +446,7 @@ namespace PointOfOrigin
             }
             seeds.Add(c);
             sim.Set(c.x, c.y, Sim.Alive);
+            TrackChanges();
             sfx.Place();
         }
 
@@ -295,6 +462,8 @@ namespace PointOfOrigin
         {
             int gen = sim.Step(1);
             sfx.Tick(gen);
+            TrackChanges();
+            match = sim.Compare(target);
             if (gen >= level.steps) Finish();
         }
 
@@ -302,30 +471,49 @@ namespace PointOfOrigin
         {
             match = sim.Compare(target);
             won = match >= WinThreshold;
+            missing = 0;
+            extra = 0;
+            sim.Refresh();
+            for (int i = 0; i < target.Length; i++)
+            {
+                bool a = sim.Cells[i] == Sim.Alive, t = target[i] == Sim.Alive;
+                if (t && !a) missing++;
+                if (a && !t) extra++;
+            }
             phase = Phase.Result;
             resultTime = 0f;
             if (won)
             {
+                winAt = Time.time;
                 solved++;
+                solvedMask |= 1 << levelIndex;
+                unlocked = Mathf.Max(unlocked, Mathf.Min(levelIndex + 1, set.levels.Length - 1));
+                SavePrefs();
                 sfx.Success();
             }
             else
             {
+                shake = 0.3f;
                 sfx.Fail();
             }
         }
 
         void Rewind()
         {
+            bool hadGrown = sim.Generation > 0;
             sim.ClearLife();
             foreach (var s in seeds) sim.Set(s.x, s.y, Sim.Alive);
+            TrackChanges();
             stepTimer = 0f;
             phase = Phase.Place;
+            if (hadGrown) sfx.Rewind();
         }
 
         void Skip()
         {
             skipped++;
+            unlocked = Mathf.Max(unlocked, Mathf.Min(levelIndex + 1, set.levels.Length - 1));
+            SavePrefs();
             Next();
         }
 
@@ -343,21 +531,33 @@ namespace PointOfOrigin
                 return;
             }
             LoadLevel(levelIndex + 1);
+            phase = Phase.Place;
         }
 
-        void Restart()
+        void ToggleMute()
         {
-            solved = 0;
-            skipped = 0;
-            LoadLevel(0);
+            muted = !muted;
+            sfx.SetMuted(muted);
+            SavePrefs();
         }
 
         // ------------------------------------------------------------------ painting
 
-        static Color32 AgeColor(int age)
+        /// <summary>Remember when each cell was born or died so Paint can animate it.</summary>
+        void TrackChanges()
         {
-            return AgeRamp[Mathf.Clamp(age - 1, 0, AgeRamp.Length - 1)];
+            sim.Refresh();
+            float now = Time.time;
+            for (int i = 0; i < prevCells.Length; i++)
+            {
+                byte c = sim.Cells[i], p = prevCells[i];
+                if (c == Sim.Alive && p != Sim.Alive) bornAt[i] = now;
+                else if (c != Sim.Alive && p == Sim.Alive) diedAt[i] = now;
+                prevCells[i] = c;
+            }
         }
+
+        static Color32 AgeColor(int age) => AgeRamp[Mathf.Clamp(age - 1, 0, AgeRamp.Length - 1)];
 
         static Color32 Lighten(Color32 c, float t) => Color32.Lerp(c, new Color32(255, 255, 255, 255), t);
 
@@ -367,7 +567,12 @@ namespace PointOfOrigin
             sim.Refresh();
             for (int i = 0; i < px.Length; i++) px[i] = ColGap;
 
-            bool placing = phase == Phase.Place || phase == Phase.Title;
+            float now = Time.time;
+            bool placing = phase == Phase.Place || (phase == Phase.Title && sim.Generation == 0);
+            float pulse = 0.5f + 0.5f * Mathf.Sin(now * 2.4f);
+            Color32 ghost = Color32.Lerp(ColGhost, ColGhostBright, pulse * 0.6f);
+            float flash = 1f - Mathf.Clamp01((now - winAt) / 0.5f);
+
             for (int y = 0; y < level.h; y++)
             {
                 for (int x = 0; x < level.w; x++)
@@ -376,46 +581,36 @@ namespace PointOfOrigin
                     byte c = sim.Cells[i];
                     bool inTarget = target[i] == Sim.Alive;
                     bool isRock = rock[i] == Sim.Rock;
-                    Color32 fill, edge;
-                    if (isRock)
+                    bool hot = !isRock && hover.x == x && hover.y == y;
+
+                    Color32 baseFill = isRock ? ColRock : ColOpen;
+                    Color32 baseEdge = isRock ? ColRockEdge : (inTarget ? ghost : ColOpenEdge);
+                    if (hot)
                     {
-                        fill = ColRock;
-                        edge = ColRockEdge;
+                        baseFill = Lighten(baseFill, 0.18f);
+                        baseEdge = Lighten(baseEdge, 0.25f);
                     }
-                    else if (c == Sim.Alive)
+                    PaintCell(x, y, baseFill, baseEdge, 0);
+                    if (isRock) continue;
+
+                    if (c == Sim.Alive)
                     {
-                        if (placing)
-                        {
-                            fill = ColSeed;
-                            edge = ColSeedEdge;
-                        }
-                        else if (inTarget)
-                        {
-                            fill = AgeColor(sim.Ages[i]);
-                            edge = Lighten(fill, 0.35f);
-                        }
-                        else
-                        {
-                            fill = ColWrong;
-                            edge = ColWrongEdge;
-                        }
+                        Color32 fill, edge;
+                        if (placing) { fill = ColSeed; edge = ColSeedEdge; }
+                        else if (inTarget) { fill = AgeColor(sim.Ages[i]); edge = Lighten(fill, 0.35f); }
+                        else { fill = ColWrong; edge = ColWrongEdge; }
+                        if (flash > 0f && inTarget && !placing) fill = Lighten(fill, flash * 0.85f);
+                        if (hot) fill = Lighten(fill, 0.15f);
+                        float a = (now - bornAt[i]) / PopSeconds;
+                        int inset = a >= 1f ? 0 : Mathf.Clamp((int)Mathf.Lerp(3.99f, 0f, Mathf.Clamp01(a)), 0, 3);
+                        PaintCell(x, y, fill, inset == 0 ? edge : fill, inset);
                     }
-                    else if (inTarget)
+                    else if (now - diedAt[i] < AfterglowSeconds)
                     {
-                        fill = ColOpen;
-                        edge = ColGhost;
+                        float d = (now - diedAt[i]) / AfterglowSeconds;
+                        int inset = Mathf.Clamp((int)Mathf.Lerp(0f, 3.99f, d), 0, 3);
+                        PaintCell(x, y, ColAfter, ColAfter, inset);
                     }
-                    else
-                    {
-                        fill = ColOpen;
-                        edge = ColOpenEdge;
-                    }
-                    if (!isRock && hover.x == x && hover.y == y)
-                    {
-                        fill = Lighten(fill, 0.18f);
-                        edge = Lighten(edge, 0.25f);
-                    }
-                    PaintCell(x, y, fill, edge);
                     if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
@@ -423,18 +618,20 @@ namespace PointOfOrigin
             tex.Apply(false);
         }
 
-        void PaintCell(int x, int y, Color32 fill, Color32 edge)
+        /// <summary>Fill a cell's 7x7 square, shrunk by <paramref name="inset"/> pixels on every side, with a 1px border.</summary>
+        void PaintCell(int x, int y, Color32 fill, Color32 edge, int inset)
         {
             int tw = tex.width;
             int x0 = x * CellPx;
             int y0 = (level.h - 1 - y) * CellPx;
-            int inner = CellPx - 1; // the last row and column stay the gap colour
-            for (int dy = 0; dy < inner; dy++)
+            int inner = CellPx - 1;
+            int lo = inset, hi = inner - inset;
+            for (int dy = lo; dy < hi; dy++)
             {
                 int row = (y0 + dy) * tw + x0;
-                for (int dx = 0; dx < inner; dx++)
+                for (int dx = lo; dx < hi; dx++)
                 {
-                    bool border = dx == 0 || dy == 0 || dx == inner - 1 || dy == inner - 1;
+                    bool border = dx == lo || dy == lo || dx == hi - 1 || dy == hi - 1;
                     px[row + dx] = border ? edge : fill;
                 }
             }
@@ -458,14 +655,37 @@ namespace PointOfOrigin
         {
             buttons.Clear();
             float s = S;
-            float w = 168f * s, h = 46f * s, gap = 12f * s;
-            float x = Screen.width - 24f * s - w;
-            float y = Screen.height - 24f * s - h;
+
+            if (phase == Phase.Title)
+            {
+                int n = set.levels.Length;
+                float b = 44f * s, gap = 10f * s;
+                float total = n * b + (n - 1) * gap;
+                float x0 = (Screen.width - total) / 2f;
+                float y = Screen.height * 0.74f;
+                for (int i = 0; i < n; i++)
+                {
+                    int index = i;
+                    buttons.Add(new Button
+                    {
+                        rect = new Rect(x0 + i * (b + gap), y, b, b),
+                        label = (i + 1).ToString(),
+                        act = () => StartLevel(index),
+                        enabled = i <= unlocked,
+                        gold = Solved(i),
+                    });
+                }
+                return;
+            }
+
+            float w = 168f * s, h = 46f * s, spacing = 12f * s;
+            float bx = Screen.width - 24f * s - w;
+            float by = Screen.height - 24f * s - h;
 
             void Add(string label, Action act, bool enabled = true)
             {
-                buttons.Add(new Button { rect = new Rect(x, y, w, h), label = label, act = act, enabled = enabled });
-                x -= w + gap;
+                buttons.Add(new Button { rect = new Rect(bx, by, w, h), label = label, act = act, enabled = enabled });
+                bx -= w + spacing;
             }
 
             switch (phase)
@@ -527,6 +747,7 @@ namespace PointOfOrigin
             stH1Right = Make(26, FontStyle.Bold, TextAnchor.UpperRight, "e8ecf5");
             stSmall = Make(16, FontStyle.Normal, TextAnchor.UpperLeft, "8a93a8");
             stSmallRight = Make(16, FontStyle.Normal, TextAnchor.UpperRight, "8a93a8");
+            stSmallCentre = Make(15, FontStyle.Normal, TextAnchor.UpperCenter, "5f6880");
             stHint = Make(18, FontStyle.Italic, TextAnchor.LowerLeft, "b7bfd1");
             stBody = Make(20, FontStyle.Normal, TextAnchor.MiddleCenter, "b7bfd1");
             stButton = Make(19, FontStyle.Bold, TextAnchor.MiddleCenter, "e8ecf5");
@@ -538,6 +759,23 @@ namespace PointOfOrigin
             GUI.color = color;
             GUI.DrawTexture(r, panelTex);
             GUI.color = old;
+        }
+
+        void DrawButtons(Vector2 gui)
+        {
+            foreach (var b in buttons)
+            {
+                bool hot = b.enabled && b.rect.Contains(gui);
+                Color back = !b.enabled ? new Color(0.10f, 0.11f, 0.15f, 0.6f)
+                    : hot ? new Color(0.30f, 0.36f, 0.48f, 0.95f)
+                    : b.gold ? new Color(0.30f, 0.26f, 0.14f, 0.92f)
+                    : new Color(0.18f, 0.21f, 0.29f, 0.92f);
+                Panel(b.rect, back);
+                var old = GUI.color;
+                GUI.color = !b.enabled ? new Color(1f, 1f, 1f, 0.3f) : b.gold ? new Color(1f, 0.85f, 0.45f, 1f) : Color.white;
+                GUI.Label(b.rect, b.label, stButton);
+                GUI.color = old;
+            }
         }
 
         void OnGUI()
@@ -556,65 +794,77 @@ namespace PointOfOrigin
             }
             if (level == null) return;
 
-            // top left: level and law
-            GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
-                $"{levelIndex + 1:00} / {set.levels.Length:00}    {level.name}", stH1);
-            GUI.Label(new Rect(24f * s, 54f * s, Screen.width * 0.6f, 30f * s),
-                $"Law {level.rule}     {level.steps} generation{(level.steps == 1 ? "" : "s")}", stSmall);
-
-            // top right: seeds or generation
-            string right = phase == Phase.Place || phase == Phase.Title
-                ? $"Seeds {seeds.Count} / {level.seeds}"
-                : $"Generation {sim.Generation} / {level.steps}";
-            GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
-            string sub = attempts > 0 ? $"attempt {attempts}" : "click a cell to plant a seed";
-            GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
-
-            // bottom left: the hint
-            float buttonsWidth = buttons.Count * 180f * s + 40f * s;
-            GUI.Label(new Rect(24f * s, Screen.height - 110f * s, Screen.width - buttonsWidth - 48f * s, 90f * s), level.hint, stHint);
-
-            foreach (var b in buttons)
+            if (phase != Phase.Title && phase != Phase.Finished)
             {
-                bool hot = b.enabled && b.rect.Contains(gui);
-                Panel(b.rect, b.enabled ? (hot ? new Color(0.30f, 0.36f, 0.48f, 0.95f) : new Color(0.18f, 0.21f, 0.29f, 0.92f)) : new Color(0.12f, 0.13f, 0.17f, 0.7f));
-                var old = GUI.color;
-                GUI.color = b.enabled ? Color.white : new Color(1f, 1f, 1f, 0.4f);
-                GUI.Label(b.rect, b.label, stButton);
-                GUI.color = old;
+                // top left: level, then the law in plain words
+                GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
+                    $"{levelIndex + 1:00} / {set.levels.Length:00}    {level.name}", stH1);
+                GUI.Label(new Rect(24f * s, 54f * s, Screen.width * 0.55f, 48f * s),
+                    $"{lawText}   ({level.rule}, {level.steps} generation{(level.steps == 1 ? "" : "s")})", stSmall);
+
+                // top right: seeds or generation, then progress
+                bool placingHud = phase == Phase.Place;
+                string right = placingHud ? $"Seeds {seeds.Count} / {level.seeds}" : $"Generation {sim.Generation} / {level.steps}";
+                GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
+                string sub = placingHud
+                    ? (attempts > 0 ? $"attempt {attempts + 1}" : "click a cell to plant a seed")
+                    : $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
+                GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
+
+                // bottom left: the hint, or the tip once an attempt has failed
+                string hint = attempts > 0 && !string.IsNullOrEmpty(level.tip) ? "Tip: " + level.tip : level.hint;
+                float buttonsWidth = buttons.Count * 180f * s + 40f * s;
+                GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
+
+                GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
+                    (muted ? "sound off   " : "") + "Space grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
             }
+
+            DrawButtons(gui);
 
             switch (phase)
             {
                 case Phase.Title:
                 {
-                    Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, 0.86f));
-                    float cy = Screen.height * 0.36f;
+                    Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, 0.66f));
+                    float cy = Screen.height * 0.24f;
                     GUI.Label(new Rect(0, cy - 60f * s, Screen.width, 100f * s), "POINT OF ORIGIN", stTitle);
-                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 40f * s, Screen.width * 0.7f, 80f * s),
+                    GUI.Label(new Rect(Screen.width * 0.15f, cy + 36f * s, Screen.width * 0.7f, 60f * s),
                         "You are shown how it ended. Find where it began.", stBody);
-                    GUI.Label(new Rect(Screen.width * 0.1f, cy + 120f * s, Screen.width * 0.8f, 120f * s),
-                        "Every pattern grew from one or two seeds under a simple law.\n" +
+                    GUI.Label(new Rect(Screen.width * 0.1f, cy + 92f * s, Screen.width * 0.8f, 100f * s),
+                        "Every pattern grew from a few seeds under one simple law.\n" +
                         "Plant your seeds, press Grow, and match the ghost outline exactly.", stBody);
+                    int done = 0;
+                    for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
+                    GUI.Label(new Rect(0, Screen.height * 0.74f - 30f * s, Screen.width, 24f * s),
+                        done == 0 ? "levels" : $"levels   ({done} of {set.levels.Length} found)", stSmallCentre);
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
-                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to begin", stBody);
+                    GUI.Label(new Rect(0, Screen.height * 0.74f + 62f * s, Screen.width, 40f * s),
+                        done == 0 ? "click or press Space to begin" : "click or press Space to continue", stBody);
                     GUI.color = old;
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
                         "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity", stSmallRight);
+                    GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width * 0.5f, 30f * s),
+                        (muted ? "sound off (M)" : "M sound") + "   Esc quit", stSmall);
                     break;
                 }
                 case Phase.Result:
                 {
+                    // a failed result fades away after a moment so the mismatch underneath can be studied
                     float a = Mathf.Clamp01(resultTime * 4f);
-                    Panel(new Rect(0, Screen.height * 0.42f, Screen.width, 120f * s), new Color(0.04f, 0.05f, 0.07f, 0.8f * a));
+                    if (!won) a *= 1f - Mathf.Clamp01((resultTime - 2.4f) / 0.6f);
+                    if (a <= 0f) break;
+                    Panel(new Rect(0, Screen.height * 0.40f, Screen.width, 140f * s), new Color(0.04f, 0.05f, 0.07f, 0.8f * a));
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, a);
                     string text = won ? "ORIGIN FOUND" : $"{Mathf.FloorToInt(match * 100f)}% match";
-                    GUI.Label(new Rect(0, Screen.height * 0.42f, Screen.width, 76f * s), text, stBanner);
-                    GUI.Label(new Rect(0, Screen.height * 0.42f + 72f * s, Screen.width, 40f * s),
-                        won ? "Space or click for the next one" : "R to rewind, then move your seeds", stBody);
+                    GUI.Label(new Rect(0, Screen.height * 0.40f, Screen.width, 76f * s), text, stBanner);
+                    string detail = won
+                        ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   Space or click for the next one"
+                        : $"{missing} missing, {extra} astray   -   R to rewind, then move your seeds";
+                    GUI.Label(new Rect(0, Screen.height * 0.40f + 72f * s, Screen.width, 40f * s), detail, stBody);
                     GUI.color = old;
                     break;
                 }
@@ -623,9 +873,11 @@ namespace PointOfOrigin
                     Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, 0.9f));
                     float cy = Screen.height * 0.36f;
                     GUI.Label(new Rect(0, cy - 60f * s, Screen.width, 100f * s), "EVERY ORIGIN FOUND", stTitle);
+                    int done = 0;
+                    for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 80f * s),
-                        $"{solved} of {set.levels.Length} found, {skipped} skipped.", stBody);
-                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to play again", stBody);
+                        $"{done} of {set.levels.Length} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stBody);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space for the menu", stBody);
                     break;
                 }
             }

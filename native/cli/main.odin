@@ -11,15 +11,73 @@ package cli
 
 import "core:fmt"
 import "core:os"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
 import sim "../sim"
 
-USAGE :: `origin_cli --w W --h H --rule B3/S23 --steps N --seeds "x,y;x,y" [--rock "row;row"] [--ascii] [--frames]
+USAGE :: `origin_cli --w W --h H --rule B3/S23 --steps N --seeds "x,y;x,y" [--rock "row;row"] [--ascii] [--frames] [--solve]
   --seeds   origin cells, zero-based x,y pairs separated by ;
   --rock    rock rows top to bottom, '#' is rock, anything else open
   --ascii   print the grown grid as text instead of JSON
-  --frames  with --ascii, print every generation`
+  --frames  with --ascii, print every generation
+  --solve   count every set of as many seeds that grows into the same pattern (-1 when too many to try)`
+
+// How many seed sets of size k, drawn from the open cells inside the target's
+// bounding box, grow into exactly the target. Rewinds the grid afterwards.
+MAX_COMBINATIONS :: 3_000_000
+
+count_solutions :: proc(g: ^sim.Grid, target: []u8, k: int, steps: int) -> (solutions: int, tried: int) {
+	if k <= 0 { return 0, 0 }
+	minx, miny, maxx, maxy := g.w, g.h, i32(-1), i32(-1)
+	for y: i32 = 0; y < g.h; y += 1 {
+		for x: i32 = 0; x < g.w; x += 1 {
+			if target[int(y) * int(g.w) + int(x)] != sim.ALIVE { continue }
+			minx, maxx = min(minx, x), max(maxx, x)
+			miny, maxy = min(miny, y), max(maxy, y)
+		}
+	}
+	if maxx < 0 { return 0, 0 }
+	cands := make([dynamic]int)
+	defer delete(cands)
+	for y := miny; y <= maxy; y += 1 {
+		for x := minx; x <= maxx; x += 1 {
+			i := int(y) * int(g.w) + int(x)
+			if g.cells[i] != sim.ROCK { append(&cands, i) }
+		}
+	}
+	n := len(cands)
+	if n < k { return 0, 0 }
+	combos: u64 = 1
+	for j := 0; j < k; j += 1 { combos = combos * u64(n - j) / u64(j + 1) }
+	if combos > MAX_COMBINATIONS { return -1, 0 }
+
+	idx := make([]int, k)
+	defer delete(idx)
+	for j := 0; j < k; j += 1 { idx[j] = j }
+	for {
+		sim.clear_life(g)
+		for j := 0; j < k; j += 1 {
+			c := cands[idx[j]]
+			g.cells[c] = sim.ALIVE
+			g.ages[c] = 1
+		}
+		sim.step_n(g, i32(steps))
+		tried += 1
+		same := true
+		for i := 0; i < len(target); i += 1 {
+			if (g.cells[i] == sim.ALIVE) != (target[i] == sim.ALIVE) { same = false; break }
+		}
+		if same { solutions += 1 }
+		// the next combination in lexicographic order
+		j := k - 1
+		for j >= 0 && idx[j] == n - k + j { j -= 1 }
+		if j < 0 { break }
+		idx[j] += 1
+		for m := j + 1; m < k; m += 1 { idx[m] = idx[m - 1] + 1 }
+	}
+	return
+}
 
 next_arg :: proc(args: []string, i: ^int) -> string {
 	if i^ + 1 < len(args) {
@@ -43,7 +101,8 @@ main :: proc() {
 	w, h, steps := 13, 13, 4
 	rule := "B1/S012345678"
 	seeds_arg, rock_arg := "", ""
-	ascii, frames := false, false
+	ascii, frames, solve := false, false, false
+	seed_count := 0
 
 	args := os.args[1:]
 	for i := 0; i < len(args); i += 1 {
@@ -56,6 +115,7 @@ main :: proc() {
 		case "--rock":   rock_arg = next_arg(args, &i)
 		case "--ascii":  ascii = true
 		case "--frames": frames = true
+		case "--solve":  solve = true
 		case "--help", "-h":
 			fmt.println(USAGE)
 			return
@@ -101,6 +161,7 @@ main :: proc() {
 			y := to_int(xy[1])
 			if sim.get_cell(g, i32(x), i32(y)) != sim.ROCK {
 				sim.set_cell(g, i32(x), i32(y), sim.ALIVE)
+				seed_count += 1
 			}
 		}
 	}
@@ -119,18 +180,31 @@ main :: proc() {
 		}
 		if !frames { print_grid(g) }
 		fmt.printfln("alive %d", sim.alive_count(g))
+		if solve {
+			target := slice.clone(g.cells)
+			defer delete(target)
+			solutions, tried := count_solutions(g, target, seed_count, steps)
+			fmt.printfln("solutions %d (tried %d)", solutions, tried)
+		}
 		return
 	}
 
 	sim.step_n(g, i32(steps))
+	alive := sim.alive_count(g)
 	b := strings.builder_make()
 	for v in g.cells {
 		strings.write_byte(&b, '#' if v == sim.ALIVE else '.')
 	}
+	solutions := -1
+	if solve {
+		target := slice.clone(g.cells)
+		defer delete(target)
+		solutions, _ = count_solutions(g, target, seed_count, steps)
+	}
 	// Odin's fmt reads `{` as a placeholder, so the braces are doubled.
 	fmt.printf(
-		`{{"w":%d,"h":%d,"rule":"%s","birth":%d,"survive":%d,"steps":%d,"alive":%d,"target":"%s"}}` + "\n",
-		w, h, rule, birth, survive, steps, sim.alive_count(g), strings.to_string(b),
+		`{{"w":%d,"h":%d,"rule":"%s","birth":%d,"survive":%d,"steps":%d,"alive":%d,"solutions":%d,"target":"%s"}}` + "\n",
+		w, h, rule, birth, survive, steps, alive, solutions, strings.to_string(b),
 	)
 }
 

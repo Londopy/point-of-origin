@@ -3,6 +3,7 @@ name First Ripple
 rule B1/S012345678
 steps 2
 hint Everything here spread from one point. Click where it began, then Grow.
+tip The shape is symmetric. Its centre is where it began.
 map
 ...........
 ...........

@@ -55,7 +55,11 @@ fails, close Unity and run the build again.
 | R | Rewind to your seeds |
 | N | Skip the level |
 | V | Reveal the designer's origins (after two failed attempts) |
-| Esc | Quit (player build) |
+| M | Sound on or off |
+| Esc | Back to the menu; quit from the menu (player build) |
+
+Progress is saved between runs; the menu has a level select and replays the
+last solved level's origins growing.
 
 ## Levels
 
@@ -76,7 +80,14 @@ map
 end
 ```
 
-Rules are Life-like rulestrings (`B3/S23`). The jam levels use four laws:
-`B1/S012345678` (ripples that keep everything), `B1/S` (sparks that live one
-generation), `B1357/S1357` (a parity law whose echoes cancel like waves) and
-`B1/S12345678` (coral).
+Rules are Life-like rulestrings (`B3/S23`). The fifteen jam levels use four
+laws: `B1/S012345678` (ripples that keep everything), `B1/S` (sparks that live
+one generation), `B1357/S1357` (a parity law whose echoes cancel like waves)
+and `B1/S12345678` (coral). An optional `tip` line is shown after the first
+failed attempt.
+
+The level compiler also asks the CLI to count how many seed placements grow
+the same target (`origin_cli --solve`, a search over the open cells inside the
+target's bounding box), so ambiguous levels show up at build time. Fourteen of
+the fifteen levels have exactly one solution; the three-seed finale has too
+many placements to count.

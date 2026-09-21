@@ -27,6 +27,7 @@ import std.args
 struct Level {
     name: String
     hint: String
+    tip: String
     rule: String
     steps: i64
     seeds: i64
@@ -38,7 +39,7 @@ struct Level {
 
 fn parse_level(text: []u8, path: []u8) -> !Level {
     var lv = Level{
-        .name = String.new(), .hint = String.new(), .rule = String.from("B3/S23"),
+        .name = String.new(), .hint = String.new(), .tip = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
         .w = 0, .h = 0,
     }
@@ -58,6 +59,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         let val = cut.1.trim()
         if key == "name" { lv.name = String.from(val) }
         else if key == "hint" { lv.hint = String.from(val) }
+        else if key == "tip" { lv.tip = String.from(val) }
         else if key == "rule" { lv.rule = String.from(val) }
         else if key == "steps" { lv.steps = try val.parse_int(i64) }
         else if key == "seeds" { lv.seeds = try val.parse_int(i64) }
@@ -173,6 +175,7 @@ fn main() -> u8 {
         argv.append("--steps"); argv.append(steps[..])
         argv.append("--seeds"); argv.append(seeds[..])
         argv.append("--rock"); argv.append(rock_rows[..])
+        argv.append("--solve")
         let out = process.run(argv[..]) catch { eprintln("levels: cannot start {}", .{cli}); return 1 }
         if !out.ok() {
             eprintln("{}: {} failed:\n{}", .{path, cli, out.stderr})
@@ -192,7 +195,9 @@ fn main() -> u8 {
         var obj = json.object()
         json.set(&mut obj, "name", json.string(lv.name[..]))
         json.set(&mut obj, "hint", json.string(lv.hint[..]))
+        json.set(&mut obj, "tip", json.string(lv.tip[..]))
         json.set(&mut obj, "rule", json.string(lv.rule[..]))
+        json.set(&mut obj, "solutions", json.number(num_of(&grown, "solutions")))
         json.set(&mut obj, "w", json.number(lv.w as f64))
         json.set(&mut obj, "h", json.number(lv.h as f64))
         json.set(&mut obj, "birth", json.number(num_of(&grown, "birth")))
@@ -204,7 +209,18 @@ fn main() -> u8 {
         json.set(&mut obj, "origins", json.string(seeds[..]))
         json.push(&mut levels, obj)
         count += 1
-        if !quiet { preview(&lv, target, rock_flat[..]) }
+        let solutions = num_of(&grown, "solutions")
+        if solutions == 0.0 {
+            eprintln("{}: the solver found no seed set that grows the target, which cannot happen; check the CLI", .{path})
+            return 1
+        }
+        if !quiet {
+            preview(&lv, target, rock_flat[..])
+            if solutions < 0.0 { println("    solutions: not counted (too many placements)", .{}) }
+            else { println("    solutions: {}", .{solutions as i64}) }
+        } else if solutions > 1.0 {
+            println("levels: {} has {} seed placements that work", .{lv.name, solutions as i64})
+        }
     }
     if count == 0 {
         eprintln("levels: no .origin files in {}", .{src_dir})

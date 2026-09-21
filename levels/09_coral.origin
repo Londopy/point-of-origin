@@ -3,6 +3,7 @@ name Coral
 rule B1/S12345678
 steps 4
 hint Here nothing dies: every cell that is born stays. The rocks carved the shape.
+tip Nothing dies here, so the origin is still alive: it is the very heart of the coral.
 map
 ...............
 ...............

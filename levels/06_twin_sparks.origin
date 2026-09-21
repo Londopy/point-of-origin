@@ -3,6 +3,7 @@ name Twin Sparks
 rule B1/S
 steps 3
 hint Two sparks. Where their rings would overlap, the cells had too many neighbours to be born.
+tip Two sparks, six cells apart. The rings that would have touched lost their touching columns.
 map
 .................
 .................
