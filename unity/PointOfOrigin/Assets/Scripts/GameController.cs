@@ -43,7 +43,7 @@ namespace PointOfOrigin
         const float LanternRadius = 6f;
         const int StartLives = 3;
         const float DeathSeconds = 1.4f;
-        const float EmberSpeed = 2.4f;        // cells per second
+        const float EmberSpeed = 2.9f;        // cells per second
         const float Gravity = 30f;
         const float JumpVelocity = 11.5f;
         const float RunSpeed = 7f;
@@ -197,8 +197,8 @@ namespace PointOfOrigin
         readonly List<float> spoutPhase = new List<float>();
         readonly HashSet<int> crumble = new HashSet<int>();
         readonly Dictionary<int, float> crumbleAt = new Dictionary<int, float>();   // cell -> when it was stepped on
-        const float SpoutPeriod = 3.2f;
-        const float SpoutOn = 1.0f;
+        const float SpoutPeriod = 2.8f;
+        const float SpoutOn = 1.1f;
         const float SpoutWarn = 0.6f;
         const int SpoutHeight = 2;
         const float CrumbleDelay = 0.45f;
@@ -268,6 +268,15 @@ namespace PointOfOrigin
         int styledHeight;
 
         bool CanReveal => attempts >= RevealAfter && !revealed && (phase == Phase.Play || phase == Phase.Result);
+
+        /// <summary>The Reveal button is always there, so nobody wonders where it went; it says what it is waiting for.</summary>
+        string RevealLabel()
+        {
+            if (revealed) return "Revealed";
+            if (CanReveal) return $"Reveal  [{L(GameAction.Reveal)}]";
+            int left = RevealAfter - attempts;
+            return left == 1 ? "Reveal  (1 more try)" : $"Reveal  ({left} tries)";
+        }
         bool Solved(int i) => (solvedMask & (1 << i)) != 0;
         bool InWorld => phase == Phase.Play || phase == Phase.Growing || phase == Phase.Result;
         bool Paused => overlay != Overlay.None;
@@ -2429,7 +2438,7 @@ namespace PointOfOrigin
                 case Phase.Play:
                     Add($"Grow  [{L(GameAction.Grow)}]", Grow, seeds.Count > 0);
                     Add($"Skip  [{L(GameAction.Skip)}]", Skip);
-                    if (CanReveal) Add($"Reveal  [{L(GameAction.Reveal)}]", Reveal);
+                    Add(RevealLabel(), Reveal, CanReveal);
                     Add("Menu  [Esc]", OpenMenu);
                     break;
                 case Phase.Growing:
@@ -2441,7 +2450,7 @@ namespace PointOfOrigin
                     {
                         Add($"Rewind  [{L(GameAction.Rewind)}]", Rewind);
                         Add($"Skip  [{L(GameAction.Skip)}]", Skip);
-                        if (CanReveal) Add($"Reveal  [{L(GameAction.Reveal)}]", Reveal);
+                        Add(RevealLabel(), Reveal, CanReveal);
                     }
                     else
                     {

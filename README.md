@@ -200,8 +200,9 @@ The origin is the puzzle; the road is how you reach it. Each chapter asks
 for a different deduction. First Bloom teaches the loop (and lets you get it
 wrong first). Fused Bloom: two blooms grew into one slab, and the slab's
 width gives both stones. Three Sparks: three rings merged, and the gaps
-where two ring walls met give the spacing. Shadow: a rock post stood inside
-a coral while it grew, and the shadow it cast falls away from the stone. Cut
+where two ring walls met give the spacing. Shadow: a rock post stood at the
+edge of a coral while it grew, and the shadow it cast falls away from the
+stone. Cut
 Echo: a cliff cut each echo short, so you count generations from the open
 edge. Bent Echo: an echo grew against a post and leans away from it. Quench:
 a bloom cut by a cave wall, with an ember to put out. Ashfall: two pit blooms

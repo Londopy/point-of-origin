@@ -118,7 +118,9 @@ class World:
         return 0 <= x < self.w and 0 <= y < self.h and not self.solid(x, y) and (x, y) not in self.deadly
 
     def standing(self, x, y):
-        return self.air(x, y) and self.solid(x, y + 1)
+        return self.air(x, y) and self.solid(x, y + 1) and (x, y) not in self.blocked
+
+    blocked = frozenset()   # cells the wanderer may not stand in: used to ask "can you get here without stepping on that seed?"
 
     def land(self, x, y):
         """Fall from an air cell to the first standing cell below, or None into the void or a hazard."""
@@ -208,9 +210,14 @@ def candidate_edges(lv):
     origins = parse_cells(lv["origins"])
     out = []
     worlds = [(False, None), (True, None)] + [(True, o) for o in origins]
+    bare_cells = World(lv, grown=False).reachable(start)
     for grown, carve in worlds:
         world = World(lv, grown=grown, carve=carve)
-        for (x, y) in world.reachable(start):
+        cells = set(world.reachable(start))
+        if grown and carve is None:
+            # the wanderer may already be standing anywhere bare rock allowed when the growth rises
+            cells |= {c for c in bare_cells if world.standing(*c)}
+        for (x, y) in cells:
             for c in world.jumps_from(x, y):
                 if carve and max(abs(x - carve[0]), abs(y - carve[1]), abs(c[0] - carve[0]), abs(c[1] - carve[1])) > 6:
                     continue
@@ -300,6 +307,50 @@ def check(lv, edges_out=None, verdicts=None, lv_index=0):
             reach1 |= after.reachable(c, None, v1)
         if exit_cell and exit_cell[0] not in reach1 and after.land(*exit_cell[0]) not in reach1:
             problems.append(f"exit {exit_cell[0]} is not reachable after growth")
+    # no pockets: once the growth stands, the door must be reachable from every safe cell the wanderer could
+    # have waited in (cells inside or beside the shape are their own lookout: a rewind frees them)
+    if exit_cell:
+        goal = exit_cell[0]
+        starts = sorted(c for c in safe if after.standing(*c))
+        good, dead = set(), set()
+        for c in starts:
+            if c in good or c in dead:
+                continue
+            r = after.reachable(c, None, v1)
+            if goal in r or after.land(*goal) in r:
+                good |= r
+                good.add(c)
+            else:
+                dead |= r
+                dead.add(c)
+        stuck = sorted(dead & set(starts))
+        if stuck:
+            problems.append(f"{len(stuck)} standing cells are pockets after the growth (no way on to the door), e.g. {stuck[:4]}")
+    # and before growing: from every cell reachable on bare rock, every origin that bare rock reaches must
+    # still be reachable, and so must every seed that could have been passed by
+    bare_origins = [o for o in origins if o in reach0]
+    bare_seeds = [k for k in pickups if k in reach0]
+    for goal, what in [(o, "origin") for o in bare_origins] + [(k, "seed") for k in bare_seeds]:
+        if what == "seed":
+            without = World(lv, grown=False)
+            without.blocked = frozenset([goal])
+            starts = sorted(without.reachable(start, None, v0))
+        else:
+            starts = sorted(reach0)
+        good, dead = set(), set()
+        for c in starts:
+            if c in good or c in dead:
+                continue
+            r = before.reachable(c, None, v0)
+            if goal in r:
+                good |= r
+                good.add(c)
+            else:
+                dead |= r
+                dead.add(c)
+        stuck = sorted(dead & set(starts))
+        if stuck:
+            problems.append(f"{what} {goal} cannot be reached from {len(stuck)} standing cells the wanderer can get to first, e.g. {stuck[:4]}")
     if not exit_cell:
         problems.append("no exit")
     # a secret, if the level has one, must be reachable on bare rock (it is off the road, not behind the growth)

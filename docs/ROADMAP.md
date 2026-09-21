@@ -84,6 +84,21 @@ allowed; shipping late is not.
       `docs/initials.txt` (one line per account), answers and closes the
       issue; every copy fetches the file at start-up (`Wall.cs`), with a
       shipped copy in StreamingAssets. Wall commits skip CI.
+- [x] (Monday 2:00 to 3:00 AM) **third-playthrough pass** (Londo: acid buried
+      under the terraces, chapter 4's coral read as a pinwheel symbol and its
+      pit trapped him, Reveal appeared and vanished, Quench's bridge was two
+      tiles, Two Echoes' trench pocket had no way back, the whole game too easy
+      to survive): terrace acid pools brought to the surface in every chapter;
+      Shadow rebuilt (four generations, a shallow pit, the post two wide against
+      the cliff, a stair of two boulders at the pit's near wall so the floor
+      climbs out in up-two hops and the coral's top is one hop from the stair);
+      Quench's bridge crumbles tile by tile; a boulder in Two Echoes' right
+      pocket and the ember moved left; Reveal always shown, counting down the
+      tries; vents at 2.8 s with a longer flame, embers faster; new spikes and
+      vents on most roads. The checker now also fails any standing cell that
+      becomes a pocket after the growth, and any seed or origin that a cell you
+      can reach first cannot reach back (that is what caught chapters 3 to 5 in
+      the physics replay).
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
       of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
       crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
