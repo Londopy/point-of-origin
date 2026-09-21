@@ -185,13 +185,14 @@ namespace PointOfOrigin
         Tutorial tut = Tutorial.Off;
         float tutTimer;
         int jumps;
-        // the background: fossils of older growths at parallax depth, and a few spores drifting in the air
-        readonly List<SpriteRenderer> fossils = new List<SpriteRenderer>();
-        readonly List<Vector2> fossilAnchors = new List<Vector2>();
+        // the background: fossils of older growths pressed into the rock, and a few spores drifting in the air
+        int[] fossilPx = new int[0];         // pixel index in the world texture
+        int[] fossilCell = new int[0];       // the rock cell that pixel belongs to (drawn only once seen)
+        Color32[] fossilColor = new Color32[0];
         readonly List<SpriteRenderer> spores = new List<SpriteRenderer>();
         readonly List<Vector3> sporeState = new List<Vector3>();   // x, y, phase
-        const float FossilParallax = 0.35f;
         const int SporeCount = 9;
+        static readonly Color32 ColBone = Hex("b8a98a");
         float demoTimer;
         int demoStage;
         string fatal;
@@ -536,29 +537,36 @@ namespace PointOfOrigin
         // ------------------------------------------------------------------ background
 
         /// <summary>
-        /// Two or three fossils per chapter: growths of random laws from one or two
-        /// points, grown by the same Odin simulation, drawn as faint outlines far
-        /// behind the world. The ruins of older origins.
+        /// Three or four fossils per chapter: growths of the game's own laws, grown
+        /// by the same Odin simulation, pressed into the rock at half scale as pale
+        /// eroded imprints with a sediment shadow. They show only where the stone
+        /// has been seen. The ruins of older origins.
         /// </summary>
         void MakeFossils()
         {
-            foreach (var f in fossils) if (f != null) Destroy(f.gameObject);
-            fossils.Clear();
-            fossilAnchors.Clear();
             var rng = new System.Random(levelIndex * 7919 + 17);
-            int count = 2 + rng.Next(2);
+            int count = 3 + rng.Next(2);
+            // dense laws only: a bloom slab, a coral, a shell ring; sparse echoes just look like scattered tiles
             (uint birth, uint survive, int steps)[] laws =
             {
                 (Mask(1, 2, 3, 4), Mask(0, 1, 2, 3, 4, 5, 6, 7, 8), 2 + rng.Next(2)),
-                (Mask(1), Mask(1, 2, 3, 4, 5, 6, 7, 8), 3 + rng.Next(3)),
-                (Mask(1, 3, 5, 7), Mask(1, 3, 5, 7), 3 + rng.Next(3)),
-                (Mask(1), 0u, 1 + rng.Next(2)),
-                (Mask(2), Mask(2, 3), 4 + rng.Next(3)),
+                (Mask(1), Mask(1, 2, 3, 4, 5, 6, 7, 8), 4 + rng.Next(3)),
+                (Mask(1), Mask(1, 2, 3, 4, 5, 6, 7, 8), 3 + rng.Next(2)),
+                (Mask(1), 0u, 1),
+                (Mask(1, 2), Mask(0, 1, 2, 3, 4, 5, 6, 7, 8), 3 + rng.Next(2)),
             };
-            const int N = 24, Px = 4;
+            const int N = 20, Px = 4;   // a fossil cell is four pixels: half a world cell
+            int tw = level.w * CellPx;
+            var pxList = new List<int>();
+            var cellList = new List<int>();
+            var colList = new List<Color32>();
+            var used = new HashSet<int>();
+            bool IsRock(int gx, int gy) => gx >= 0 && gy >= 0 && gx < level.w && gy < level.h && rock[gy * level.w + gx] == Sim.Rock;
+
             for (int k = 0; k < count; k++)
             {
                 var law = laws[rng.Next(laws.Length)];
+                var alive = new List<Vector2Int>();
                 using (var fs = new Sim(N, N))
                 {
                     fs.SetRule(law.birth, law.survive);
@@ -566,38 +574,80 @@ namespace PointOfOrigin
                     if (rng.Next(3) == 0) fs.Set(N / 2 + 2 + rng.Next(2), N / 2 + rng.Next(3) - 1, Sim.Alive);
                     fs.Step(law.steps);
                     fs.Refresh();
-                    var t = new Texture2D(N * Px, N * Px, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-                    var pixels = new Color32[N * Px * N * Px];
-                    var clear = new Color32(0, 0, 0, 0);
-                    for (int i = 0; i < pixels.Length; i++) pixels[i] = clear;
-                    var col = new Color32(ColGhost.r, ColGhost.g, ColGhost.b, 255);
                     for (int y = 0; y < N; y++)
                         for (int x = 0; x < N; x++)
+                            if (fs.Cells[y * N + x] == Sim.Alive) alive.Add(new Vector2Int(x, y));
+                }
+                if (alive.Count < 3) continue;
+                int minx = N, maxx = 0, miny = N, maxy = 0;
+                foreach (var a in alive) { minx = Mathf.Min(minx, a.x); maxx = Mathf.Max(maxx, a.x); miny = Mathf.Min(miny, a.y); maxy = Mathf.Max(maxy, a.y); }
+                int cw = (maxx - minx + 2) / 2, ch = (maxy - miny + 2) / 2;   // world cells covered
+
+                // somewhere fully inside the stone: every covered cell rock, a rock roof above, nothing shared with another fossil
+                int gx = -1, gy = -1;
+                for (int attempt = 0; attempt < 80 && gx < 0; attempt++)
+                {
+                    int tx = 1 + rng.Next(Mathf.Max(1, level.w - cw - 2));
+                    int ty = 2 + rng.Next(Mathf.Max(1, level.h - ch - 2));
+                    bool ok = true;
+                    for (int dy = -1; dy <= ch && ok; dy++)
+                        for (int dx = -1; dx <= cw && ok; dx++)
                         {
-                            if (fs.Cells[y * N + x] != Sim.Alive) continue;
-                            int x0 = x * Px, y0 = (N - 1 - y) * Px;
-                            for (int dy = 0; dy < Px - 1; dy++)
-                                for (int dx = 0; dx < Px - 1; dx++)
-                                    if (dx == 0 || dy == 0 || dx == Px - 2 || dy == Px - 2)
-                                        pixels[(y0 + dy) * N * Px + x0 + dx] = col;
+                            if (!IsRock(tx + dx, ty + dy)) ok = false;
+                            else if (used.Contains((ty + dy) * level.w + tx + dx)) ok = false;
                         }
-                    t.SetPixels32(pixels);
-                    t.Apply(false);
-                    var go = new GameObject("Fossil " + k);
-                    var sr = go.AddComponent<SpriteRenderer>();
-                    // far away: a fossil cell is half a world cell or so, the whole thing a few cells wide
-                    float cell = 0.45f + (float)rng.NextDouble() * 0.3f;
-                    sr.sprite = Sprite.Create(t, new Rect(0, 0, N * Px, N * Px), new Vector2(0.5f, 0.5f), Px / cell);
-                    sr.sortingOrder = -7;
-                    sr.sharedMaterial = worldSr.sharedMaterial;
-                    sr.color = new Color(1f, 1f, 1f, 0.14f + (float)rng.NextDouble() * 0.08f);
-                    fossils.Add(sr);
-                    // spread along the chapter, in the upper air; anchors are in world units at parallax 1
-                    float ax = level.w * (0.15f + 0.7f * (k + (float)rng.NextDouble() * 0.8f) / count);
-                    float ay = level.h * (0.55f + 0.35f * (float)rng.NextDouble());
-                    fossilAnchors.Add(new Vector2(ax, ay));
+                    if (ok) { gx = tx; gy = ty; }
+                }
+                if (gx < 0) continue;
+                for (int dy = -1; dy <= ch; dy++)
+                    for (int dx = -1; dx <= cw; dx++)
+                        used.Add((gy + dy) * level.w + gx + dx);
+
+                int x0 = gx * CellPx;
+                int yTop = (level.h - gy) * CellPx - 1;   // top pixel row of grid row gy, in bottom-up texture rows
+                var kept = new HashSet<Vector2Int>();
+                foreach (var a in alive) if (rng.NextDouble() >= 0.15) kept.Add(a);   // the rest eroded away
+                void Put(int ix, int iy, float toBone, float toDark)
+                {
+                    if (ix < 0 || iy < 0 || ix >= tw || iy >= level.h * CellPx) return;
+                    float g = grain != null ? grain[(iy % grainN) * grainN + (ix % grainN)] : 0.5f;
+                    var stone = Color32.Lerp(ColRockEdge, ColRockLight, g);
+                    var col = toDark > 0f ? Color32.Lerp(stone, new Color32(6, 7, 10, 255), toDark) : Color32.Lerp(stone, ColBone, toBone);
+                    pxList.Add(iy * tw + ix);
+                    cellList.Add((level.h - 1 - iy / CellPx) * level.w + ix / CellPx);
+                    colList.Add(col);
+                }
+                // the sediment bed: a dark rim one pixel outside every open edge of the shape
+                foreach (var a in kept)
+                {
+                    int fx = (a.x - minx) * Px, fy = (a.y - miny) * Px;
+                    if (!kept.Contains(a + Vector2Int.left)) for (int d = -1; d <= Px; d++) Put(x0 + fx - 1, yTop - (fy + d), 0f, 0.45f);
+                    if (!kept.Contains(a + Vector2Int.right)) for (int d = -1; d <= Px; d++) Put(x0 + fx + Px, yTop - (fy + d), 0f, 0.45f);
+                    if (!kept.Contains(a + Vector2Int.down)) for (int d = -1; d <= Px; d++) Put(x0 + fx + d, yTop - (fy - 1), 0f, 0.45f);
+                    if (!kept.Contains(a + Vector2Int.up)) for (int d = -1; d <= Px; d++) Put(x0 + fx + d, yTop - (fy + Px), 0f, 0.45f);
+                }
+                // the imprint itself: pale bone, lighter at the top-left, a shadow along the bottom and right, chipped here and there
+                foreach (var a in kept)
+                {
+                    int fx = (a.x - minx) * Px, fy = (a.y - miny) * Px;
+                    for (int dy = 0; dy < Px; dy++)
+                        for (int dx = 0; dx < Px; dx++)
+                        {
+                            bool shadow = dx == Px - 1 || dy == Px - 1;
+                            if (shadow && !(kept.Contains(a + Vector2Int.right) && dx == Px - 1 && dy < Px - 1) && !(kept.Contains(a + Vector2Int.up) && dy == Px - 1 && dx < Px - 1))
+                            {
+                                Put(x0 + fx + dx, yTop - (fy + dy), 0f, 0.3f);
+                                continue;
+                            }
+                            if (rng.NextDouble() < 0.1) continue;   // chipped
+                            float pale = dx == 0 || dy == 0 ? 0.7f : 0.55f;
+                            Put(x0 + fx + dx, yTop - (fy + dy), pale, 0f);
+                        }
                 }
             }
+            fossilPx = pxList.ToArray();
+            fossilCell = cellList.ToArray();
+            fossilColor = colList.ToArray();
         }
 
         static uint Mask(params int[] counts)
@@ -1003,14 +1053,6 @@ namespace PointOfOrigin
             // parallax: the skylines slide slower than the world and sit just below the ground line
             if (farSr != null) farSr.transform.position = new Vector3(camBase.x * 0.75f - 24f, -1.5f, 4f);
             if (nearSr != null) nearSr.transform.position = new Vector3(camBase.x * 0.5f - 24f, -1.0f, 3f);
-            // the fossils drift at their own depth between the skylines and the world
-            for (int i = 0; i < fossils.Count; i++)
-            {
-                var a = fossilAnchors[i];
-                fossils[i].transform.position = new Vector3(
-                    a.x + (camBase.x - level.w / 2f) * FossilParallax,
-                    a.y + (camBase.y - level.h / 2f) * FossilParallax, 2.5f);
-            }
             UpdateSpores(dt);
         }
 
@@ -1558,6 +1600,9 @@ namespace PointOfOrigin
                     if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
+            // fossils pressed into the stone, wherever the stone has been seen
+            for (int i = 0; i < fossilPx.Length; i++)
+                if (allSeen || seen[fossilCell[i]]) px[fossilPx[i]] = fossilColor[i];
             // the tutorial's beacon on the stone, drawn even into the unexplored dark
             if (tut == Tutorial.FindStone || tut == Tutorial.Plant)
                 foreach (var a in answer) PaintDot(a.x, a.y, pulse > 0.5f ? ColLamp : ColSeedEdge);
