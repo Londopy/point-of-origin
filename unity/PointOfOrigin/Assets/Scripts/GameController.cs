@@ -27,6 +27,14 @@ namespace PointOfOrigin
         const float LanternRadius = 3f;       // cells revealed and lit around the wanderer
         const float WalkSpeed = 11f;          // cells per second
         const float KeyRepeat = 0.1f;         // seconds between steps while a direction key is held
+        const float CamPitch = 32f;           // the isometric camera
+        const float CamYaw = 45f;
+        const float TileSize = 0.90f;         // footprint of a tile inside its 1x1 cell
+        const float TileBottom = -0.55f;      // slabs reach this far down into the void
+        const float FloorTop = 0.20f;         // top of an ordinary tile
+        const float RockTop = 0.95f;
+        const float AliveTop = 0.46f;         // a living cell's top, plus a little per generation of age
+        const float RiseSeconds = 0.35f;      // a revealed tile rises out of the void over this long
 
         static Color32 Hex(string hex)
         {
@@ -89,14 +97,12 @@ namespace PointOfOrigin
         Vector2 heroPos;
         readonly List<Vector2Int> path = new List<Vector2Int>();
         bool[] seen;
+        float[] seenAt;
         bool allSeen;
         float keyTimer;
         int stepParity;
 
-        Texture2D tex;
-        Color32[] px;
-        SpriteRenderer sr;
-        SpriteRenderer bg;
+        WorldView view;
         Camera cam;
         Vector3 camBase;
         Sfx sfx;
@@ -148,22 +154,19 @@ namespace PointOfOrigin
             cam.orthographic = true;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = ColBg;
-            camBase = new Vector3(0f, -0.8f, -10f);
+            cam.nearClipPlane = 0.3f;
+            cam.farClipPlane = 300f;
+            cam.transform.rotation = Quaternion.Euler(CamPitch, CamYaw, 0f);
+            camBase = -cam.transform.forward * 80f;
             cam.transform.position = camBase;
             var extraData = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             if (extraData != null) extraData.renderPostProcessing = false;
 
-            var shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default") ?? Shader.Find("Sprites/Default");
-
-            var back = new GameObject("Background");
-            bg = back.AddComponent<SpriteRenderer>();
-            bg.sortingOrder = -10;
-            bg.sprite = Sprite.Create(MakeVignette(128), new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f), 128f);
-            if (shader != null) bg.sharedMaterial = new Material(shader);
-
-            var grid = new GameObject("Grid");
-            sr = grid.AddComponent<SpriteRenderer>();
-            if (shader != null) sr.sharedMaterial = new Material(shader);
+            var shader = Shader.Find("PointOfOrigin/VertexColor");
+            if (shader == null) Debug.LogError("Point of Origin: the PointOfOrigin/VertexColor shader is missing from Resources");
+            var world = new GameObject("World");
+            view = world.AddComponent<WorldView>();
+            view.Init(new Material(shader));
 
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
@@ -191,26 +194,6 @@ namespace PointOfOrigin
             sim = null;
         }
 
-        static Texture2D MakeVignette(int size)
-        {
-            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var pixels = new Color32[size * size];
-            float half = size / 2f;
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
-                    float d = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy) / 1.25f);
-                    float k = d * d * (3f - 2f * d);
-                    pixels[y * size + x] = Color32.Lerp(ColBgCentre, ColBgEdge, k);
-                }
-            }
-            t.SetPixels32(pixels);
-            t.Apply(false);
-            return t;
-        }
-
         void LoadLevel(int index)
         {
             levelIndex = Mathf.Clamp(index, 0, set.levels.Length - 1);
@@ -228,6 +211,7 @@ namespace PointOfOrigin
             diedAt = new float[n];
             for (int i = 0; i < n; i++) { bornAt[i] = -10f; diedAt[i] = -10f; }
             seen = new bool[n];
+            seenAt = new float[n];
             allSeen = false;
             path.Clear();
             hero = StartCell();
@@ -244,38 +228,33 @@ namespace PointOfOrigin
             stepTimer = 0f;
             winAt = -10f;
 
-            int tw = level.w * CellPx, th = level.h * CellPx;
-            if (tex == null || tex.width != tw || tex.height != th)
-            {
-                if (sr.sprite != null) Destroy(sr.sprite);
-                if (tex != null) Destroy(tex);
-                tex = new Texture2D(tw, th, TextureFormat.RGBA32, false)
-                {
-                    filterMode = FilterMode.Point,
-                    wrapMode = TextureWrapMode.Clamp,
-                };
-                px = new Color32[tw * th];
-                sr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), new Vector2(0.5f, 0.5f), CellPx);
-            }
             TrackChanges();
             FitCamera();
-            Paint();
+            BuildWorld();
         }
+
+        /// <summary>World position of a cell's centre at the floor plane: row 0 is the far edge.</summary>
+        Vector3 CellCentre(float x, float y) =>
+            new Vector3(x - level.w / 2f + 0.5f, 0f, (level.h - 1 - y) - level.h / 2f + 0.5f);
 
         void FitCamera()
         {
             if (level == null || cam == null) return;
-            // The grid takes about three quarters of the shorter screen axis, leaving the HUD bands clear;
-            // on the title screen it sits smaller behind the text.
+            // Fit the grid's footprint box on screen, leaving the HUD bands clear; the title shows it smaller.
             float aspect = Mathf.Max(0.1f, cam.aspect);
-            float size = Mathf.Max((level.h / 2f + 1.5f) / 0.74f, (level.w / 2f + 1.5f) / 0.74f / aspect);
-            if (phase == Phase.Title) size *= 1.45f;
-            cam.orthographicSize = size;
-            if (bg != null)
+            var m = cam.worldToCameraMatrix;
+            float hw = level.w / 2f + 0.4f, hh = level.h / 2f + 0.4f;
+            float ex = 0f, ey = 0f;
+            for (int i = 0; i < 8; i++)
             {
-                bg.transform.position = new Vector3(camBase.x, camBase.y, 5f);
-                bg.transform.localScale = new Vector3(2f * cam.orthographicSize * aspect * 1.04f, 2f * cam.orthographicSize * 1.04f, 1f);
+                var p = new Vector3((i & 1) == 0 ? -hw : hw, (i & 2) == 0 ? TileBottom : RockTop + 0.4f, (i & 4) == 0 ? -hh : hh);
+                var v = m.MultiplyPoint(p);
+                ex = Mathf.Max(ex, Mathf.Abs(v.x));
+                ey = Mathf.Max(ey, Mathf.Abs(v.y));
             }
+            float size = Mathf.Max(ey / 0.74f, ex / aspect / 0.84f);
+            if (phase == Phase.Title) size *= 1.4f;
+            cam.orthographicSize = size;
         }
 
         int FirstUnsolved()
@@ -312,7 +291,7 @@ namespace PointOfOrigin
             {
                 shake -= Time.deltaTime;
                 var o = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, shake) * 0.6f;
-                cam.transform.position = camBase + new Vector3(o.x, o.y, 0f);
+                cam.transform.position = camBase + cam.transform.right * o.x + cam.transform.up * o.y;
             }
             else
             {
@@ -412,15 +391,19 @@ namespace PointOfOrigin
                 Demo();
             }
             if (phase == Phase.Result) resultTime += Time.deltaTime;
-            Paint();
+            BuildWorld();
         }
 
+        /// <summary>The cell under a screen point: the mouse ray meets the plane of the tile tops.</summary>
         Vector2Int CellAt(Vector2 screen)
         {
-            var wp = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 0f));
+            var ray = cam.ScreenPointToRay(new Vector3(screen.x, screen.y, 0f));
+            var plane = new Plane(Vector3.up, new Vector3(0f, FloorTop + 0.1f, 0f));
+            if (!plane.Raycast(ray, out float dist)) return new Vector2Int(-1, -1);
+            var wp = ray.GetPoint(dist);
             int x = Mathf.FloorToInt(wp.x + level.w / 2f);
-            int fromBottom = Mathf.FloorToInt(wp.y + level.h / 2f);
-            int y = level.h - 1 - fromBottom;
+            int row = Mathf.FloorToInt(wp.z + level.h / 2f);
+            int y = level.h - 1 - row;
             if (x < 0 || y < 0 || x >= level.w || y >= level.h) return new Vector2Int(-1, -1);
             return new Vector2Int(x, y);
         }
@@ -456,7 +439,11 @@ namespace PointOfOrigin
                 {
                     if (dx * dx + dy * dy > r2) continue;
                     var n = c + new Vector2Int(dx, dy);
-                    if (InBounds(n)) seen[n.y * level.w + n.x] = true;
+                    if (!InBounds(n)) continue;
+                    int i = n.y * level.w + n.x;
+                    if (seen[i]) continue;
+                    seen[i] = true;
+                    seenAt[i] = Time.time;
                 }
         }
 
@@ -736,11 +723,22 @@ namespace PointOfOrigin
 
         static Color32 Lighten(Color32 c, float t) => Color32.Lerp(c, new Color32(255, 255, 255, 255), t);
 
-        void Paint()
+        static float EaseOut(float t)
         {
-            if (sim == null || tex == null) return;
+            t = Mathf.Clamp01(t);
+            return 1f - (1f - t) * (1f - t);
+        }
+
+        /// <summary>
+        /// Rebuild the diorama: every visible cell is a slab whose colour and
+        /// height say what it is, revealed ground rises out of the void, living
+        /// cells stand taller with age, and the wanderer stands on its cell.
+        /// </summary>
+        void BuildWorld()
+        {
+            if (sim == null || view == null) return;
             sim.Refresh();
-            for (int i = 0; i < px.Length; i++) px[i] = ColGap;
+            view.Begin();
 
             float now = Time.time;
             bool placing = phase == Phase.Place || (phase == Phase.Title && sim.Generation == 0);
@@ -749,6 +747,7 @@ namespace PointOfOrigin
             Color32 ghost = Color32.Lerp(ColGhost, ColGhostBright, pulse * 0.6f);
             float flash = 1f - Mathf.Clamp01((now - winAt) / 0.5f);
             float reach = LanternRadius + 1.3f;
+            float half = TileSize / 2f;
 
             for (int y = 0; y < level.h; y++)
             {
@@ -760,7 +759,16 @@ namespace PointOfOrigin
                     bool isRock = rock[i] == Sim.Rock;
                     bool alive = c == Sim.Alive;
                     bool visible = allSeen || seen[i] || alive;
-                    bool hot = !isRock && visible && hover.x == x && hover.y == y;
+                    var cell = CellCentre(x, y);
+                    if (!visible)
+                    {
+                        // unseen ground: a sunken, dark slab, so the world's footprint is always there to explore
+                        float sunkTop = TileBottom + (isRock ? 0.32f : 0.12f);
+                        view.Box(cell.x - half, TileBottom, cell.z - half, cell.x + half, sunkTop, cell.z + half, isRock ? ColRockDark : ColUnknown);
+                        continue;
+                    }
+                    float rise = seen[i] ? EaseOut((now - seenAt[i]) / RiseSeconds) : 1f;
+                    bool hot = !isRock && hover.x == x && hover.y == y;
                     float light = 0f;
                     if (lamp)
                     {
@@ -769,104 +777,75 @@ namespace PointOfOrigin
                         light *= light;
                     }
 
-                    Color32 baseFill, baseEdge;
-                    if (!visible)
+                    Color32 top;
+                    float height;
+                    if (isRock)
                     {
-                        baseFill = isRock ? ColRockDark : ColUnknown;
-                        baseEdge = isRock ? ColRockDark : ColUnknownEdge;
+                        top = ColRock;
+                        height = RockTop;
+                    }
+                    else if (alive)
+                    {
+                        if (placing) top = ColSeed;
+                        else if (inTarget) top = AgeColor(sim.Ages[i]);
+                        else top = ColWrong;
+                        if (flash > 0f && inTarget && !placing) top = Lighten(top, flash * 0.85f);
+                        float grown = EaseOut((now - bornAt[i]) / PopSeconds);
+                        float full = AliveTop + Mathf.Min(sim.Ages[i], 5) * 0.04f;
+                        height = Mathf.Lerp(FloorTop, full, grown);
                     }
                     else
                     {
-                        baseFill = isRock ? ColRock : ColOpen;
-                        baseEdge = isRock ? ColRockEdge : (inTarget ? ghost : ColOpenEdge);
+                        top = ColOpen;
+                        height = FloorTop;
+                        float since = now - diedAt[i];
+                        if (since < AfterglowSeconds)
+                        {
+                            float d = since / AfterglowSeconds;
+                            top = Color32.Lerp(ColAfter, ColOpen, d);
+                            height = Mathf.Lerp(AliveTop, FloorTop, EaseOut(d));
+                        }
                     }
-                    if (light > 0f)
-                    {
-                        baseFill = Color32.Lerp(baseFill, ColLamp, light * 0.28f);
-                        baseEdge = Color32.Lerp(baseEdge, ColLamp, light * 0.38f);
-                    }
-                    if (hot)
-                    {
-                        baseFill = Lighten(baseFill, 0.18f);
-                        baseEdge = Lighten(baseEdge, 0.25f);
-                    }
-                    PaintCell(x, y, baseFill, baseEdge, 0);
-                    if (isRock) continue;
+                    if (light > 0f) top = Color32.Lerp(top, ColLamp, light * (alive ? 0.12f : 0.28f));
+                    if (hot) top = Lighten(top, 0.18f);
+                    top = Color32.Lerp(ColUnknown, top, rise);
 
-                    if (alive)
+                    var p = cell;
+                    float yTop = Mathf.Lerp(TileBottom + 0.12f, height, rise);
+                    view.Box(p.x - half, TileBottom, p.z - half, p.x + half, yTop, p.z + half, top);
+
+                    if (inTarget && !alive && !isRock && rise >= 1f)
                     {
-                        Color32 fill, edge;
-                        if (placing) { fill = ColSeed; edge = ColSeedEdge; }
-                        else if (inTarget) { fill = AgeColor(sim.Ages[i]); edge = Lighten(fill, 0.35f); }
-                        else { fill = ColWrong; edge = ColWrongEdge; }
-                        if (flash > 0f && inTarget && !placing) fill = Lighten(fill, flash * 0.85f);
-                        if (light > 0f) fill = Color32.Lerp(fill, ColLamp, light * 0.12f);
-                        if (hot) fill = Lighten(fill, 0.15f);
-                        float a = (now - bornAt[i]) / PopSeconds;
-                        int inset = a >= 1f ? 0 : Mathf.Clamp((int)Mathf.Lerp(3.99f, 0f, Mathf.Clamp01(a)), 0, 3);
-                        PaintCell(x, y, fill, inset == 0 ? edge : fill, inset);
+                        Color32 frame = light > 0f ? Color32.Lerp(ghost, ColLamp, light * 0.3f) : ghost;
+                        view.Rim(p.x - half, p.z - half, p.x + half, p.z + half, yTop + 0.012f, 0.09f, frame);
                     }
-                    else if (visible && now - diedAt[i] < AfterglowSeconds)
-                    {
-                        float d = (now - diedAt[i]) / AfterglowSeconds;
-                        int inset = Mathf.Clamp((int)Mathf.Lerp(0f, 3.99f, d), 0, 3);
-                        PaintCell(x, y, ColAfter, ColAfter, inset);
-                    }
-                    if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
+                    if (revealed && answer.Contains(new Vector2Int(x, y)))
+                        view.Box(p.x - 0.14f, yTop, p.z - 0.14f, p.x + 0.14f, yTop + 0.16f, p.z + 0.14f, ColReveal);
                 }
             }
-            if (lamp) PaintHero(now);
-            tex.SetPixels32(px);
-            tex.Apply(false);
+            if (lamp) BuildHero(now);
+            view.Commit();
         }
 
-        /// <summary>The wanderer: a small warm figure with a rounded outline, drawn at its interpolated position.</summary>
-        void PaintHero(float now)
+        /// <summary>The wanderer: a small body and head standing on its cell, bobbing, with a lantern at its side.</summary>
+        void BuildHero(float now)
         {
-            int tw = tex.width, th = tex.height;
-            float bob = Mathf.Sin(now * 5f) * 0.6f;
-            int cx = Mathf.RoundToInt(heroPos.x * CellPx) + 3;
-            int cy = Mathf.RoundToInt((level.h - 1 - heroPos.y) * CellPx + 3 + bob);
-            for (int dy = -2; dy <= 2; dy++)
-            {
-                for (int dx = -2; dx <= 2; dx++)
-                {
-                    if (Mathf.Abs(dx) == 2 && Mathf.Abs(dy) == 2) continue;
-                    int x = cx + dx, y = cy + dy;
-                    if (x < 0 || y < 0 || x >= tw || y >= th) continue;
-                    bool rim = Mathf.Abs(dx) == 2 || Mathf.Abs(dy) == 2;
-                    px[y * tw + x] = rim ? ColHeroEdge : ColHero;
-                }
-            }
+            var p = CellCentre(heroPos.x, heroPos.y);
+            var under = new Vector2Int(Mathf.RoundToInt(heroPos.x), Mathf.RoundToInt(heroPos.y));
+            float ground = StandingHeight(under);
+            float bob = 0.02f * Mathf.Sin(now * 5f) + 0.02f;
+            float y0 = ground + bob;
+            view.Box(p.x - 0.17f, y0, p.z - 0.17f, p.x + 0.17f, y0 + 0.42f, p.z + 0.17f, ColHero);
+            view.Box(p.x - 0.12f, y0 + 0.46f, p.z - 0.12f, p.x + 0.12f, y0 + 0.70f, p.z + 0.12f, ColHeroEdge);
+            view.Box(p.x + 0.20f, y0 + 0.18f, p.z - 0.06f, p.x + 0.32f, y0 + 0.34f, p.z + 0.06f, ColLamp);
         }
 
-        /// <summary>Fill a cell's 7x7 square, shrunk by <paramref name="inset"/> pixels on every side, with a 1px border.</summary>
-        void PaintCell(int x, int y, Color32 fill, Color32 edge, int inset)
+        float StandingHeight(Vector2Int c)
         {
-            int tw = tex.width;
-            int x0 = x * CellPx;
-            int y0 = (level.h - 1 - y) * CellPx;
-            int inner = CellPx - 1;
-            int lo = inset, hi = inner - inset;
-            for (int dy = lo; dy < hi; dy++)
-            {
-                int row = (y0 + dy) * tw + x0;
-                for (int dx = lo; dx < hi; dx++)
-                {
-                    bool border = dx == lo || dy == lo || dx == hi - 1 || dy == hi - 1;
-                    px[row + dx] = border ? edge : fill;
-                }
-            }
-        }
-
-        void PaintDot(int x, int y, Color32 color)
-        {
-            int tw = tex.width;
-            int x0 = x * CellPx + 2;
-            int y0 = (level.h - 1 - y) * CellPx + 2;
-            for (int dy = 0; dy < 3; dy++)
-                for (int dx = 0; dx < 3; dx++)
-                    px[(y0 + dy) * tw + x0 + dx] = color;
+            if (!InBounds(c)) return FloorTop;
+            int i = c.y * level.w + c.x;
+            if (sim.Cells[i] == Sim.Alive) return AliveTop + Mathf.Min(sim.Ages[i], 5) * 0.04f;
+            return FloorTop;
         }
 
         // ------------------------------------------------------------------ HUD

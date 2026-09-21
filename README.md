@@ -11,7 +11,7 @@ seed, press Grow, and watch: the ghost outline fills in gold where your growth
 matches and bleeds red where it does not. Match it exactly and you have found
 the origin.
 
-![Headwaters, generation 3 of 5](docs/screenshots/03_level10_growing.png)
+![Confluence, part-way explored](docs/screenshots/12_world_finale.png)
 
 ## Three languages, one game
 
