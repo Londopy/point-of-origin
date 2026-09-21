@@ -112,7 +112,21 @@ so nothing is left unbound. Bindings, volumes and progress are saved in
 
 `tools/platform_check.py` checks every chapter for reachability (stone, seeds,
 a safe place to stand, the door once grown) with a coarse jump model; run it
-after editing a level.
+after editing a level. The coarse model ignores walls in mid-air, so there is
+a second, exact pass that runs inside the Editor: export every jump the model
+could use, replay each one with the real physics and a family of inputs,
+then re-run the check counting only the confirmed jumps.
+
+```bash
+python tools/platform_check.py --candidates=nx-out/candidates.json
+unity command eval_file --project-path unity/PointOfOrigin tools/editor/verify_jumps.cs   # Play mode, ~3 min
+python tools/platform_check.py --verdicts=nx-out/verdicts.json
+```
+
+The other scripts in `tools/editor` run the same way: `solve_all.cs` plants
+every chapter's origins and grows them, `tutorial_walk.cs` steps the tutorial
+by faking what the player did, and `jump_envelope.cs` measures which landing
+offsets the physics can reach (used to calibrate the coarse model).
 
 ## Levels
 

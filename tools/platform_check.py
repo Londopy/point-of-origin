@@ -10,6 +10,8 @@ are too wide and origins you cannot stand in, not every trap.
     python tools/platform_check.py unity/PointOfOrigin/Assets/StreamingAssets/levels.json
 """
 import json
+import os
+import subprocess
 import sys
 from collections import deque
 
@@ -27,18 +29,70 @@ def parse_cells(text):
     return out
 
 
+CLI = None
+
+
+def find_cli():
+    global CLI
+    if CLI is not None:
+        return CLI
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("origin_cli.exe", "origin_cli"):
+        p = os.path.join(here, "tools", "bin", name)
+        if os.path.exists(p):
+            CLI = p
+            return p
+    CLI = ""
+    return ""
+
+
+_footprints = {}
+
+
+def solo_footprints(lv):
+    """What each origin grows on its own (rock in place, no other seed): the growth that exists when the
+    player has grown the earlier stones and is on the way to plant this one. Needs the Odin CLI; without it,
+    falls back to the final target minus a 3x3 around the origin (coarser, and wrong for enclosed stones)."""
+    key = lv["name"]
+    if key in _footprints:
+        return _footprints[key]
+    w, h = lv["w"], lv["h"]
+    origins = parse_cells(lv["origins"])
+    rock_rows = ";".join(lv["rock"][y * w:(y + 1) * w] for y in range(h))
+    result = []
+    cli = find_cli()
+    for o in origins:
+        cells = set()
+        if cli:
+            out = subprocess.run([cli, "--w", str(w), "--h", str(h), "--rule", lv["rule"], "--steps", str(lv["steps"]),
+                                  "--seeds", f"{o[0]},{o[1]}", "--rock", rock_rows, "--ascii"], capture_output=True, text=True).stdout
+            rows = [l for l in out.splitlines() if l and not l.startswith("alive")]
+            if len(rows) == h:
+                cells = {(x, y) for y, row in enumerate(rows) for x, ch in enumerate(row) if ch == "#"}
+        if not cells:
+            cells = {(x, y) for y in range(h) for x in range(w) if lv["target"][y * w + x] == "#"
+                     and max(abs(x - o[0]), abs(y - o[1])) > 1}
+        result.append(cells)
+    _footprints[key] = result
+    return result
+
+
 class World:
     def __init__(self, lv, grown, carve=None):
+        """grown=False: bare rock. grown=True: the final target is solid. grown=True with carve=origin:
+        only the growth of the other origins is solid (each grown alone), this one's is not there yet."""
         self.w, self.h = lv["w"], lv["h"]
         self.rock = lv["rock"]
         self.grown = grown
         self.target = lv["target"]
-        # cells treated as air even when grown: the 3x3 around an origin still to be planted
-        self.carve = set()
-        if carve is not None:
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    self.carve.add((carve[0] + dx, carve[1] + dy))
+        self.cells = None
+        if grown and carve is not None:
+            origins = parse_cells(lv["origins"])
+            prints = solo_footprints(lv)
+            self.cells = set()
+            for o, cells in zip(origins, prints):
+                if tuple(o) != tuple(carve):
+                    self.cells |= cells
 
     def solid(self, x, y):
         if x < 0 or x >= self.w:
@@ -48,7 +102,11 @@ class World:
         i = y * self.w + x
         if self.rock[i] == "#":
             return True
-        return self.grown and self.target[i] == "#" and (x, y) not in self.carve
+        if not self.grown:
+            return False
+        if self.cells is not None:
+            return (x, y) in self.cells
+        return self.target[i] == "#"
 
     def air(self, x, y):
         return 0 <= x < self.w and 0 <= y < self.h and not self.solid(x, y)
@@ -66,7 +124,29 @@ class World:
             y += 1
         return None
 
-    def reachable(self, start):
+    def jumps_from(self, x, y):
+        """The jump edges the coarse model allows from a standing cell."""
+        out = []
+        if not (self.air(x, y - 1) and self.air(x, y - 2)):
+            return out
+        for dx in range(-JUMP_ACROSS, JUMP_ACROSS + 1):
+            for dy in range(-JUMP_UP, 1):
+                c = (x + dx, y + dy)
+                if c != (x, y) and self.standing(*c):
+                    out.append(c)
+            # a leap over a gap that ends in a fall
+            for dy in range(1, 3):
+                c = (x + dx, y + dy)
+                if self.air(*c):
+                    landed = self.land(*c)
+                    if landed is not None:
+                        out.append(landed)
+        return out
+
+    def reachable(self, start, parents=None, verified=None):
+        """Standing cells reachable from start. With a dict, records each cell's (parent, kind):
+        kind is 'walk' for a step or a drop, 'jump' for anything the jump model allowed.
+        With a set of verified (from, to) pairs, only those jumps count (a physics replay's verdict)."""
         seen = set()
         q = deque()
         s = self.land(*start) if not self.standing(*start) else start
@@ -74,33 +154,74 @@ class World:
             return seen
         q.append(s)
         seen.add(s)
+        if parents is not None:
+            parents[s] = (None, "start")
         while q:
             x, y = q.popleft()
             nxt = []
             for dx in (-1, 1):
                 nx = x + dx
                 if self.air(nx, y):
-                    nxt.append(self.land(nx, y))
-            headroom = self.air(x, y - 1) and self.air(x, y - 2)
-            if headroom:
-                for dx in range(-JUMP_ACROSS, JUMP_ACROSS + 1):
-                    for dy in range(-JUMP_UP, 1):
-                        c = (x + dx, y + dy)
-                        if c != (x, y) and self.standing(*c):
-                            nxt.append(c)
-                    # a leap over a gap that ends in a fall
-                    for dy in range(1, 3):
-                        c = (x + dx, y + dy)
-                        if self.air(*c):
-                            nxt.append(self.land(*c))
-            for c in nxt:
+                    nxt.append((self.land(nx, y), "walk"))
+            for c in self.jumps_from(x, y):
+                if verified is None or ((x, y), c) in verified:
+                    nxt.append((c, "jump"))
+            for c, kind in nxt:
                 if c is not None and c not in seen:
                     seen.add(c)
+                    if parents is not None:
+                        parents[c] = ((x, y), kind)
                     q.append(c)
         return seen
 
 
-def check(lv):
+def path_edges(parents, goal):
+    """The jump edges along the recorded path back from goal: [(from, to)], walking left out."""
+    edges = []
+    c = goal
+    while c in parents and parents[c][0] is not None:
+        p, kind = parents[c]
+        if kind == "jump":
+            edges.append((p, c))
+        c = p
+    edges.reverse()
+    return edges
+
+
+def world_key(grown, carve):
+    return f"{'grown' if grown else 'bare'}" + (f"@{carve[0]},{carve[1]}" if carve else "")
+
+
+def candidate_edges(lv):
+    """Every jump the coarse model could use, per world, for a physics replay: the bare world, the grown
+    world, and for each origin the grown world with that origin carved out (only jumps near it, the rest
+    is the grown world's)."""
+    start = parse_cells(lv["start"])[0]
+    origins = parse_cells(lv["origins"])
+    out = []
+    worlds = [(False, None), (True, None)] + [(True, o) for o in origins]
+    for grown, carve in worlds:
+        world = World(lv, grown=grown, carve=carve)
+        for (x, y) in world.reachable(start):
+            for c in world.jumps_from(x, y):
+                if carve and max(abs(x - carve[0]), abs(y - carve[1]), abs(c[0] - carve[0]), abs(c[1] - carve[1])) > 6:
+                    continue
+                out.append({"grown": grown, "carve": list(carve) if carve else None, "from": [x, y], "to": list(c)})
+    return out
+
+
+def verified_for(verdicts, lv_index, grown, carve):
+    """The set of physics-verified jumps for one world: a carved world falls back to the grown world's."""
+    ok = set()
+    for v in verdicts:
+        if v["level"] != lv_index or v["grown"] != grown or not v["ok"]:
+            continue
+        if v["carve"] is None or (carve is not None and tuple(v["carve"]) == tuple(carve)):
+            ok.add((tuple(v["from"]), tuple(v["to"])))
+    return ok
+
+
+def check(lv, edges_out=None, verdicts=None, lv_index=0):
     w, h = lv["w"], lv["h"]
     start = parse_cells(lv["start"])[0]
     origins = parse_cells(lv["origins"])
@@ -109,8 +230,39 @@ def check(lv):
     problems = []
     before = World(lv, grown=False)
     after = World(lv, grown=True)
-    reach0 = before.reachable(start)
-    reach_grown = after.reachable(start)
+    v0 = verified_for(verdicts, lv_index, False, None) if verdicts is not None else None
+    v1 = verified_for(verdicts, lv_index, True, None) if verdicts is not None else None
+    parents0 = {}
+    reach0 = before.reachable(start, parents0, v0)
+    parents_grown = {}
+    reach_grown = after.reachable(start, parents_grown, v1)
+    if edges_out is not None:
+        # the jump edges the paths rely on, for a physics replay: bare-rock paths to every origin and seed
+        # reachable that way, grown paths (the other origins' growth in place, this one's carved out) to the
+        # origins that need them, and the grown path to the exit
+        for g in [o for o in origins if o in reach0] + [k for k in pickups if k in reach0]:
+            for e in path_edges(parents0, g):
+                edges_out.append({"grown": False, "carve": None, "from": list(e[0]), "to": list(e[1]), "goal": list(g)})
+        for o in origins:
+            if o in reach0:
+                continue
+            parents_c = {}
+            carved = World(lv, grown=True, carve=o)
+            if o in carved.reachable(start, parents_c):
+                for e in path_edges(parents_c, o):
+                    edges_out.append({"grown": True, "carve": list(o), "from": list(e[0]), "to": list(e[1]), "goal": list(o)})
+        for k in pickups:
+            if k in reach0 or before.land(*k) in reach0:
+                continue
+            target = k if k in reach_grown else after.land(*k)
+            if target in reach_grown:
+                for e in path_edges(parents_grown, target):
+                    edges_out.append({"grown": True, "carve": None, "from": list(e[0]), "to": list(e[1]), "goal": list(k)})
+        for c in exit_cell:
+            target = c if c in reach_grown else after.land(*c)
+            if target in reach_grown:
+                for e in path_edges(parents_grown, target):
+                    edges_out.append({"grown": True, "carve": None, "from": list(e[0]), "to": list(e[1]), "goal": list(c)})
     # the first origin must be reachable on bare rock; later ones may need an earlier growth bridged
     # (grow, cross, plant, rewind, grow again), so they only need to be reachable once the growth exists
     first_ok = False
@@ -120,8 +272,10 @@ def check(lv):
             continue
         if o in reach0:
             first_ok = True
-        elif o not in World(lv, grown=True, carve=o).reachable(start):
-            problems.append(f"origin {o} is not reachable even with the other growth in place")
+        else:
+            vc = verified_for(verdicts, lv_index, True, o) if verdicts is not None else None
+            if o not in World(lv, grown=True, carve=o).reachable(start, None, vc):
+                problems.append(f"origin {o} is not reachable even with the other growth in place")
     if origins and not first_ok:
         problems.append("no origin is reachable before any growth")
     for k in pickups:
@@ -135,7 +289,7 @@ def check(lv):
     if safe:
         reach1 = set()
         for c in safe[:6]:
-            reach1 |= after.reachable(c)
+            reach1 |= after.reachable(c, None, v1)
         if exit_cell and exit_cell[0] not in reach1 and after.land(*exit_cell[0]) not in reach1:
             problems.append(f"exit {exit_cell[0]} is not reachable after growth")
     if not exit_cell:
@@ -144,17 +298,49 @@ def check(lv):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "unity/PointOfOrigin/Assets/StreamingAssets/levels.json"
+    """
+    python tools/platform_check.py [levels.json]                      coarse check
+    python tools/platform_check.py --candidates=nx-out/candidates.json   also write every jump the model may use
+    python tools/platform_check.py --verdicts=nx-out/verdicts.json       only count jumps the Editor replay confirmed
+    """
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    path = args[0] if args else "unity/PointOfOrigin/Assets/StreamingAssets/levels.json"
+    edges_path = verdicts_path = None
+    for a in sys.argv[1:]:
+        if a.startswith("--candidates="):
+            edges_path = a[len("--candidates="):]
+        if a.startswith("--verdicts="):
+            verdicts_path = a[len("--verdicts="):]
     data = json.load(open(path, encoding="utf-8"))
+    verdicts = json.load(open(verdicts_path, encoding="utf-8")) if verdicts_path else None
     bad = 0
+    all_edges = []
     for i, lv in enumerate(data["levels"]):
-        problems = check(lv)
+        problems = check(lv, None, verdicts, i + 1)
         status = "ok" if not problems else "PROBLEMS"
-        print(f"{i + 1:02d} {lv['name']}: {status}")
+        extra = ""
+        if edges_path:
+            edges = candidate_edges(lv)
+            seen = set()
+            for e in edges:
+                key = (e["grown"], tuple(e["carve"] or ()), tuple(e["from"]), tuple(e["to"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                all_edges.append({"level": i + 1, **e})
+            extra = f"  ({len(seen)} candidate jumps)"
+        if verdicts is not None:
+            n = sum(1 for v in verdicts if v["level"] == i + 1)
+            k = sum(1 for v in verdicts if v["level"] == i + 1 and v["ok"])
+            extra = f"  (physics: {k} of {n} candidate jumps confirmed)"
+        print(f"{i + 1:02d} {lv['name']}: {status}{extra}")
         for p in problems:
             print("    -", p)
         bad += bool(problems)
-    print(f"{len(data['levels']) - bad} of {len(data['levels'])} chapters pass")
+    if edges_path:
+        json.dump(all_edges, open(edges_path, "w", encoding="utf-8"))
+        print(f"{len(all_edges)} candidate jumps written to {edges_path}")
+    print(f"{len(data['levels']) - bad} of {len(data['levels'])} chapters pass" + (" with physics-verified jumps" if verdicts is not None else ""))
     sys.exit(1 if bad else 0)
 
 

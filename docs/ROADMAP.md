@@ -48,6 +48,13 @@ allowed; shipping late is not.
 
 ## Monday morning
 
+- [x] (Sunday 11:30 PM to 12:30 AM) **physics-verified reachability**: every
+      jump the checker could use replayed with the real physics inside the
+      Editor (`tools/editor/verify_jumps.cs`), then the check re-run on the
+      confirmed jumps only. Found chapter 5 unclimbable (a parity echo grows a
+      three-tall column three from its stone); trenches there are now eight
+      wide with the stone two from the cliff, and all ten chapters pass.
+      Hints proofread against the new geometry.
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**. Jump height, run speed,
       ember speed, lantern radius, camera lead, the door's look.
 - [ ] 10:00 to 12:00: **chapter polish**. Tune the four new chapters from the

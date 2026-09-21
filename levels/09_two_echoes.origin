@@ -3,7 +3,7 @@ name Two Echoes
 rule B1357/S1357
 steps 3
 hint Two seeds, one trench, one shape. Two echoes crossed here and cancelled each other where they met: a cell with an even count of living neighbours stays dark. Find where each began. Their tops are the way up the cliff.
-tip The shape is symmetric, but nothing began at its centre: that is where the two echoes cancelled. The stones are two cells apart on the floor, one either side of the middle, each under the lone floor cell beside it.
+tip The shape is symmetric, but nothing began at its centre: that is where the two echoes cancelled. The stones are two cells apart on the floor, one either side of the middle, each right beside a lone floor cell.
 intro Two origins, close enough to touch. Their echoes crossed, and where they crossed they cancelled, and the shape they left has a hole where you would look first.
 outro Two beginnings, one shape. Nothing that grows keeps its own edges.
 map
