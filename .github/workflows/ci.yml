@@ -19,7 +19,7 @@ jobs:
     name: Odin core, CLI and levels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Odin
         uses: laytan/setup-odin@v2.12.2
@@ -62,7 +62,7 @@ jobs:
     name: Python and Nexium tooling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Python scripts compile
         run: python3 -m compileall -q tools blender
@@ -76,7 +76,7 @@ jobs:
     name: C# bindings match the Odin exports
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Every exported proc has a DllImport
         run: |
