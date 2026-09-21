@@ -19,7 +19,7 @@ jobs:
         with:
           lfs: false
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: unity/PointOfOrigin/Library
           key: unity-library-${{ hashFiles('unity/PointOfOrigin/Packages/manifest.json') }}
