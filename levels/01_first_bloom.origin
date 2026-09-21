@@ -1,11 +1,16 @@
-// The tutorial: a dip to learn jumping, a chasm with a floor and a stone, the bloom as a slab, a dip and a step to the door.
+// The tutorial: a dip to learn jumping, a chasm with a floor and a stone, the bloom as a slab, an acid dip and a step to the door.
 name First Bloom
 rule B1234/S012345678
 steps 2
-hint Something bloomed from the stone down in the chasm. Stand on the stone, press E to plant, jump back up to the left, then Grow. The bloom is solid ground.
-tip The origin is the cell you stand in on the stone. Growth takes whatever stands inside it: be back on the rock before you grow.
-intro You wake at the edge of a chasm with a lantern in your hand. Across it, the faint outline of something that once grew. It grew from one point. It can again.
+hint Something bloomed from the stone down in the chasm. Plant on the stone, jump back up, Grow. The bloom is solid ground. Mind the green pool after it.
+tip Two generations reach two cells each way: a bloom is five wide, and it began in its middle. Growth takes whatever stands inside it: be back on the rock before you grow.
+intro You wake at the edge of a chasm with a lantern in your hand, and the lantern has a voice. Across the chasm, the faint outline of something that once grew.
 outro The ground remembers. Where you planted the seed, the bloom grew back, and it holds your weight.
+say wake|Awake. Good. I am the light; you are the legs. Down there is what is left of a bloom.
+say plant|A seed. Now step away from it. Growth does not care what it grows through.
+say grow|Watch the colours. Gold is right. Red is a guess.
+say found|Exact. The door felt it open. Walk.
+say die|The dark keeps what it takes. Not you, not yet.
 map
 ........................................................
 ........................................................
@@ -22,6 +27,6 @@ map
 ..s.................................................x...
 ##########..######.........##########..#################
 ##########..######...o.....##########..#################
-##################...#.....#############################
+##################...#.....##########~~#################
 ########################################################
 end

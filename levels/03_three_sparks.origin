@@ -1,0 +1,36 @@
+// Three sparks whose rings merged, gaps where two walls met; three seeds hidden behind, above and below the road.
+name Three Sparks
+rule B1/S
+steps 1
+hint A new law: born beside exactly one living neighbour, nothing survives. A spark leaves a ring. Three sparks left this, and where two rings would share a wall, nothing was born. Three seeds: one behind you, one up the tower, one down the pit.
+tip A ring is three wide with the spark dead in its middle. Two sparks two apart share a wall cell that gets two neighbours and stays dark: that is the gap. Read the gaps for the spacing.
+intro Here nothing lived past its first breath. Three sparks, three rings, grown into one another. The seeds were scattered: back, up, and down.
+outro Three sparks, one ring. Where they touched, they cancelled. Even light has edges.
+say wake|Three seeds this time. One of them is behind you. Nobody looks behind them.
+say seed|One. Keep counting.
+say plant|Two apart makes a shared wall and a gap. Three apart makes a bridge.
+say grow|One generation. Blink and it is done.
+say found|Three rings, exact. The ring is ground. Climb.
+say die|That was the wrong way to learn it, but you learned it.
+map
+....................................................................................................
+....................................................................................................
+....................................................................................................
+....................................................................................................
+....................................................................................................
+....................................................................................................
+....................................................................................................
+......................k.............................................................................
+....................####............................................................................
+..................c.####............................................................................
+....................####........................................................................x...
+######..........c...####...........................................###################f####f########
+######..............####...........................................#############~~##################
+..................c.####...........................................#################################
+.k......s...........####......e...........................o.o..o...#################################
+########################################......######################################################
+########################################^^.k^^######################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+end

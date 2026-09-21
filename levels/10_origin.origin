@@ -1,33 +1,39 @@
-// A road with a dip and a fenced ember, the seed in an ember's pit, a wide pillar with a wall on its far side, a ladder beside a rising ember; the bloom is cut by the wall and becomes the mesa to the high road.
+// The road has everything; the seed lies in a spiked pit with an ember; the stone stands on a pillar top behind a low post, against a wall; four generations of bloom, cut by the wall and shadowed by the post, become the mesa to the high road.
 name Origin
 rule B1234/S012345678
 steps 4
-hint The seed lies in the pit where an ember paces. The stone stands somewhere on the pillar's top, against the wall. The ladder climbs past a rising ember. Plant, come back down the ladder, Grow, then climb the bloom over the wall to the high road.
-tip Four generations reach four cells out. The wall cut this bloom: count four back from its open edge and you have the stone. Wait on the ladder, at least five cells from it, before you grow.
+hint The seed lies in the pit between the spikes, where an ember paces. The stone stands on the pillar's top, behind the low post and against the wall. The ladder climbs past a rising ember. Plant, come back down, Grow, climb the bloom over the wall to the high road.
+tip Four generations reach four cells out. The wall cut this bloom: count four back from its open edge and you have the stone. The post inside it only bends the top. Wait on the ladder, at least five cells from the stone, before you grow.
 intro The highest stone in the deepest cave. You have found where every ruin began. This is where you began: a seed in a pit, a stone on a pillar against a wall, and an ember rising and falling between them.
 outro The last bloom grew from the highest point, and you climbed it into the light. You were its seed.
+say wake|Everything this cave knows how to do, it will do to you between here and the pillar. I have seen it all. You will see it once.
+say seed|The last seed. Do not fall on the way up; I cannot carry you.
+say plant|Against the wall, behind the post. Now down the ladder, well below it, before you grow.
+say grow|Four generations. It will be a mountain.
+say found|There. That is where you began. Climb it into the light; I will come with you.
+say die|Not here. Not this close.
 map
 ....................................................................................................
 ....................................................................................................
 ...................................................................#........#.......#...............
-...................................................................#........#...e...#...........x...
-...................................................................#################################
-.........................................................#.........#################################
-...................................................................#################################
-........................................................#........o.#################################
+...................................................................#........#...e...#............x..
+...................................................................#######################f#########
+.........................................................#.........#########################~~######
+..............................................................#....#################################
+........................................................#.....#..o.#################################
 ............................................................########################################
-.........................................................#..########################################
+.........................................................c..########################################
 ............................................................########################################
 ........................................................#...########################################
 ..........................................................E.########################################
-.........................................................#..########################################
+.........................................................c..########################################
 ............................................................########################################
 ..........#.......#.....................................#...########################################
-..s.......#...e...#.........................................########################################
-######..########################.......#############################################################
-######..########################.......#############################################################
+..s.......#...e...#.......^^................................########################################
+######..########################.......#######f####f################################################
+######~~########################.......#############################################################
 ################################......##############################################################
-################################.ek....#############################################################
+################################^^ek.^.#############################################################
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################

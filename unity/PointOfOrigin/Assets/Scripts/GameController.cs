@@ -19,8 +19,12 @@ namespace PointOfOrigin
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
         enum Overlay { None, Menu, Help, Settings, Controls, Credits }
 
-        /// <summary>The first chapter walks the player through the loop, one prompt at a time, keyed to what they have done.</summary>
-        enum Tutorial { Off, Move, Jump, FindStone, Plant, GetClear, Grow, Cross }
+        /// <summary>
+        /// The first chapter walks the player through the loop, one prompt at a time, keyed to what they
+        /// have done: plant somewhere, see the red and the gold, rewind, take the seed back, reason out the
+        /// origin, plant there, grow, cross.
+        /// </summary>
+        enum Tutorial { Off, Move, Jump, FindOutline, PlantAnywhere, GetClear, GrowFirst, SeeResult, RewindIt, TakeBack, Reason, PlantRight, GetClear2, GrowRight, Cross }
 
         class Ember
         {
@@ -185,6 +189,45 @@ namespace PointOfOrigin
         Tutorial tut = Tutorial.Off;
         float tutTimer;
         int jumps;
+        // hazards: cells the automaton sees as rock (acid, spouts, crumble) or air (spikes), with their own physics
+        byte[] phys;                                     // what the wanderer collides with: rock minus acid
+        readonly HashSet<int> acid = new HashSet<int>();
+        readonly HashSet<int> spikes = new HashSet<int>();
+        readonly List<Vector2Int> spouts = new List<Vector2Int>();
+        readonly List<float> spoutPhase = new List<float>();
+        readonly HashSet<int> crumble = new HashSet<int>();
+        readonly Dictionary<int, float> crumbleAt = new Dictionary<int, float>();   // cell -> when it was stepped on
+        const float SpoutPeriod = 3.2f;
+        const float SpoutOn = 1.0f;
+        const float SpoutWarn = 0.6f;
+        const int SpoutHeight = 2;
+        const float CrumbleDelay = 0.45f;
+        const float CrumbleGone = 2.8f;
+        static readonly Color32 ColAcid = Hex("2f8a3a");
+        static readonly Color32 ColAcidBright = Hex("8ff05a");
+        static readonly Color32 ColSpike = Hex("9aa3b5");
+        static readonly Color32 ColFlame = Hex("ff7a1f");
+        static readonly Color32 ColFlameCore = Hex("fff0a8");
+        static readonly Color32 ColCrack = Hex("141720");
+        // the lantern's voice: a queue of lines shown in a bubble by the wanderer, typed out with blips
+        readonly Queue<string> voiceQueue = new Queue<string>();
+        string voiceLine = "";
+        float voiceAt = -10f;
+        int voiceShown;
+        const float VoiceCharsPerSecond = 38f;
+        const float VoiceHold = 2.6f;
+        readonly HashSet<string> voiceSaid = new HashSet<string>();   // triggers already used this chapter
+        static readonly string[] DeathQuips =
+        {
+            "Again. Slower, this time.", "The dark keeps what it takes. Not you, not yet.", "I have the light. You have the legs. Try once more.",
+            "That was the wrong way to learn it, but you learned it.", "Everything that grew here died once too.",
+        };
+        int deathQuip;
+        // gamepad: a focused button so a pad can drive every menu
+        int padFocus = -1;
+        Vector2 lastMouse;
+        float spoutHeard;
+        float lastBubble;
         // the background: fossils of older growths pressed into the rock, and a few spores drifting in the air
         int[] fossilPx = new int[0];         // pixel index in the world texture
         int[] fossilCell = new int[0];       // the rock cell that pixel belongs to (drawn only once seen)
@@ -198,7 +241,7 @@ namespace PointOfOrigin
         string fatal;
 
         readonly List<Button> buttons = new List<Button>();
-        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stSmallCentre, stHint, stButton, stBanner, stBody, stRow, stRowValue;
+        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stSmallCentre, stHint, stButton, stBanner, stBody, stRow, stRowValue, stVoice;
         Texture2D panelTex;
         int styledHeight;
 
@@ -474,6 +517,14 @@ namespace PointOfOrigin
             target = level.TargetCells();
             sim.Load(rock);
             int n = level.w * level.h;
+            // hazards: acid is rock to the automaton but nothing to stand on; spikes are air to both
+            phys = (byte[])rock.Clone();
+            acid.Clear(); spikes.Clear(); spouts.Clear(); spoutPhase.Clear(); crumble.Clear(); crumbleAt.Clear();
+            foreach (var c in level.AcidCells()) { int i = c.y * level.w + c.x; acid.Add(i); phys[i] = Sim.Dead; }
+            foreach (var c in level.SpikeCells()) spikes.Add(c.y * level.w + c.x);
+            foreach (var c in level.CrumbleCells()) crumble.Add(c.y * level.w + c.x);
+            var srng = new System.Random(index * 131 + 7);
+            foreach (var c in level.SpoutCells()) { spouts.Add(c); spoutPhase.Add((float)srng.NextDouble() * SpoutPeriod); }
             prevCells = new byte[n];
             bornAt = new float[n];
             diedAt = new float[n];
@@ -775,6 +826,8 @@ namespace PointOfOrigin
             var mouse = InputBridge.MousePosition;
             var gui = new Vector2(mouse.x, Screen.height - mouse.y);
             Layout();
+            if (Paused || phase == Phase.Title || phase == Phase.GameOver) UpdatePadMenu();
+            else padFocus = -1;
 
             if (InputBridge.Clicked)
             {
@@ -791,7 +844,7 @@ namespace PointOfOrigin
                     switch (phase)
                     {
                         case Phase.Title: StartLevel(FirstUnsolved()); break;
-                        case Phase.Story: phase = Phase.Play; break;
+                        case Phase.Story: phase = Phase.Play; Say("wake"); break;
                         case Phase.GameOver: Retry(); break;
                         case Phase.Finished: EnterTitle(); break;
                         case Phase.Result: if (!won) Rewind(); break;
@@ -850,11 +903,12 @@ namespace PointOfOrigin
                 if (InputBridge.Held(GameAction.Right)) move += 1f;
                 bool jumpHeld = InputBridge.Held(GameAction.Jump);
                 StepPlayer(dt, move, jumpHeld);
+                if (InWorld) CheckHazards();
                 if (InWorld)
                 {
                     var cell = CellOf(PlayerCentre);
                     if (cell != lastRevealCell) { lastRevealCell = cell; RevealAround(cell); }
-                    if (pickupsLeft.Remove(cell)) { carried++; sfx.Success(); }
+                    if (pickupsLeft.Remove(cell)) { carried++; sfx.Success(); Say("seed"); }
                     if (won && cell == exitCell) { Next(); return; }
                     UpdateEmbers(dt);
                     if (tut != Tutorial.Off) UpdateTutorial(dt);
@@ -882,9 +936,55 @@ namespace PointOfOrigin
             }
             if (phase == Phase.Result) resultTime += Time.deltaTime;
 
+            UpdateVoice();
             FollowCamera(dt);
             Paint();
             PlaceSprites();
+        }
+
+        /// <summary>A pad moves a focus through the buttons on screen and activates it; the mouse takes it back.</summary>
+        void UpdatePadMenu()
+        {
+            if (buttons.Count == 0) { padFocus = -1; return; }
+            var mouse = InputBridge.MousePosition;
+            if ((mouse - lastMouse).sqrMagnitude > 4f) { padFocus = -1; lastMouse = mouse; }
+            int step = InputBridge.PadMenuStep(), side = InputBridge.PadMenuSide();
+            bool activate = InputBridge.PadActivate();
+            if (step == 0 && side == 0 && !activate) return;
+            // order the buttons by row, then column
+            var order = new List<int>();
+            for (int i = 0; i < buttons.Count; i++) if (buttons[i].enabled) order.Add(i);
+            order.Sort((a, b) =>
+            {
+                float dy = buttons[a].rect.y - buttons[b].rect.y;
+                if (Mathf.Abs(dy) > 8f) return dy < 0 ? -1 : 1;
+                return buttons[a].rect.x.CompareTo(buttons[b].rect.x);
+            });
+            if (order.Count == 0) return;
+            int pos = order.IndexOf(padFocus);
+            if (pos < 0) { padFocus = order[0]; pos = 0; if (!activate) return; }
+            if (step != 0 || side != 0)
+            {
+                // up/down: the nearest button in that direction; left/right: the next in row order
+                if (step != 0)
+                {
+                    var cur = buttons[padFocus].rect;
+                    int best = -1; float bestD = float.MaxValue;
+                    foreach (var i in order)
+                    {
+                        var r = buttons[i].rect;
+                        float dy = (r.y - cur.y) * step;
+                        if (dy <= 8f) continue;
+                        float d = dy + Mathf.Abs(r.x - cur.x) * 0.3f;
+                        if (d < bestD) { bestD = d; best = i; }
+                    }
+                    if (best >= 0) padFocus = best;
+                }
+                else padFocus = order[(pos + side + order.Count) % order.Count];
+                sfx.Select();
+                return;
+            }
+            if (activate && padFocus >= 0 && padFocus < buttons.Count) buttons[padFocus].act();
         }
 
         // ------------------------------------------------------------------ platforming
@@ -895,8 +995,142 @@ namespace PointOfOrigin
             if (wy < 0 || wy >= level.h) return false;
             int gy = level.h - 1 - wy;
             int i = gy * level.w + gx;
-            if (rock[i] == Sim.Rock) return true;
+            if (phys[i] == Sim.Rock) return !CrumbleFallen(i);
             return sim.Generation > 0 && sim.Cells[i] == Sim.Alive;
+        }
+
+        // ------------------------------------------------------------------ the lantern's voice
+
+        /// <summary>Say the chapter's line for a trigger, once per chapter; deaths draw on the quips when a chapter has none.</summary>
+        void Say(string trigger)
+        {
+            if (level == null || voiceSaid.Contains(trigger)) return;
+            string line = null;
+            foreach (var (t, l) in level.Lines()) if (t == trigger) { line = l; break; }
+            if (line == null && trigger == "die") { line = DeathQuips[deathQuip % DeathQuips.Length]; deathQuip++; }
+            if (line == null) return;
+            if (trigger != "die") voiceSaid.Add(trigger);
+            voiceQueue.Enqueue(line);
+        }
+
+        void UpdateVoice()
+        {
+            float now = Time.time;
+            if (voiceLine.Length == 0 && voiceQueue.Count > 0)
+            {
+                voiceLine = voiceQueue.Dequeue();
+                voiceAt = now;
+                voiceShown = 0;
+            }
+            if (voiceLine.Length == 0) return;
+            int shown = Mathf.Min(voiceLine.Length, (int)((now - voiceAt) * VoiceCharsPerSecond));
+            if (shown > voiceShown)
+            {
+                if (shown / 3 != voiceShown / 3 && voiceLine[shown - 1] != ' ') sfx.VoiceBlip(shown);
+                voiceShown = shown;
+            }
+            float fullAt = voiceAt + voiceLine.Length / VoiceCharsPerSecond;
+            if (now > fullAt + VoiceHold) voiceLine = "";
+        }
+
+        void ClearVoice()
+        {
+            voiceQueue.Clear();
+            voiceLine = "";
+        }
+
+        // ------------------------------------------------------------------ hazards
+
+        bool CrumbleFallen(int i)
+        {
+            if (!crumbleAt.TryGetValue(i, out var t0)) return false;
+            float age = Time.time - t0;
+            return age > CrumbleDelay && age < CrumbleDelay + CrumbleGone;
+        }
+
+        /// <summary>0 = quiet, 1 = about to burst (sparks), 2 = burning.</summary>
+        int SpoutState(int k, float now)
+        {
+            float t = (now + spoutPhase[k]) % SpoutPeriod;
+            if (t < SpoutOn) return 2;
+            if (t > SpoutPeriod - SpoutWarn) return 1;
+            return 0;
+        }
+
+        bool FlameAt(int gx, int gy, float now)
+        {
+            for (int k = 0; k < spouts.Count; k++)
+            {
+                var s = spouts[k];
+                if (s.x != gx || gy >= s.y || gy < s.y - SpoutHeight) continue;
+                if (SpoutState(k, now) == 2) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Acid, spikes and flame against the wanderer's body; crumble under the feet.</summary>
+        void CheckHazards()
+        {
+            float x0 = pPos.x - PlayerW / 2f + 0.12f, x1 = pPos.x + PlayerW / 2f - 0.12f;
+            float y0 = pPos.y + 0.1f, y1 = pPos.y + PlayerH - 0.1f;
+            int gx0 = Mathf.FloorToInt(x0), gx1 = Mathf.FloorToInt(x1);
+            int gy0 = GridY(y1), gy1 = GridY(y0);
+            float now = Time.time;
+            for (int gy = gy0; gy <= gy1; gy++)
+                for (int gx = gx0; gx <= gx1; gx++)
+                {
+                    var c = new Vector2Int(gx, gy);
+                    if (!InBounds(c)) continue;
+                    int i = gy * level.w + gx;
+                    if (acid.Contains(i)) { Die("THE ACID TOOK YOU"); return; }
+                    if (spikes.Contains(i)) { Die("THE SPIKES TOOK YOU"); return; }
+                    if (spouts.Count > 0 && FlameAt(gx, gy, now)) { Die("THE FIRE TOOK YOU"); return; }
+                }
+            // crumble: the cells right under the feet start their timer
+            if (grounded && crumble.Count > 0)
+            {
+                int under = GridY(pPos.y - 0.05f);
+                for (int gx = gx0; gx <= gx1; gx++)
+                {
+                    if (gx < 0 || gx >= level.w || under < 0 || under >= level.h) continue;
+                    int i = under * level.w + gx;
+                    if (crumble.Contains(i) && !crumbleAt.ContainsKey(i)) { crumbleAt[i] = now; sfx.Crack(); }
+                }
+            }
+            // fallen cells come back; the moment one falls, a thud
+            var restore = new List<int>();
+            foreach (var kv in crumbleAt)
+            {
+                float age = now - kv.Value;
+                if (age > CrumbleDelay + CrumbleGone) restore.Add(kv.Key);
+                else if (age > CrumbleDelay && age - Time.deltaTime <= CrumbleDelay) sfx.Thud();
+            }
+            foreach (var i in restore) crumbleAt.Remove(i);
+            // nearby spouts igniting, acid bubbling, embers hissing
+            var centre = PlayerCentre;
+            float emberNear = 0f, acidNear = 0f;
+            foreach (var e in embers)
+            {
+                var world = new Vector2(e.pos.x + 0.5f, level.h - 1 - e.pos.y + 0.5f);
+                emberNear = Mathf.Max(emberNear, 1f - Mathf.Clamp01((Vector2.Distance(world, centre) - 1f) / 5f));
+            }
+            var here = CellOf(centre);
+            foreach (int i in acid)
+            {
+                var c = new Vector2Int(i % level.w, i / level.w);
+                float d = Vector2.Distance(CellCentreWorld(c), centre);
+                acidNear = Mathf.Max(acidNear, 1f - Mathf.Clamp01((d - 1.5f) / 5f));
+            }
+            sfx.SetNearby(emberNear, acidNear);
+            for (int k = 0; k < spouts.Count; k++)
+            {
+                float t = (now + spoutPhase[k]) % SpoutPeriod;
+                if (t < Time.deltaTime * 1.5f && Vector2.Distance(CellCentreWorld(spouts[k]), centre) < 9f && now - spoutHeard > 0.2f)
+                {
+                    sfx.Whoosh();
+                    spoutHeard = now;
+                }
+            }
         }
 
         bool Overlaps(float x, float y, float w, float h)
@@ -1095,7 +1329,7 @@ namespace PointOfOrigin
             switch (phase)
             {
                 case Phase.Title: StartLevel(FirstUnsolved()); break;
-                case Phase.Story: phase = Phase.Play; break;
+                case Phase.Story: phase = Phase.Play; Say("wake"); break;
                 case Phase.GameOver: Retry(); break;
                 case Phase.Play: Grow(); break;
                 case Phase.Growing: while (phase == Phase.Growing) Advance(); break;
@@ -1109,6 +1343,10 @@ namespace PointOfOrigin
             overlay = Overlay.None;
             listening = null;
             tut = Tutorial.Off;
+            ClearVoice();
+            sfx.SetTitleMusic();
+            sfx.SetMotifPlaying(true, 0.8f);
+            sfx.SetNearby(0f, 0f);
             LoadLevel(DemoLevel());
             phase = Phase.Title;
             allSeen = true;
@@ -1133,6 +1371,12 @@ namespace PointOfOrigin
             tut = levelIndex == 0 && !Solved(0) ? Tutorial.Move : Tutorial.Off;
             tutTimer = 0f;
             jumps = 0;
+            voiceSaid.Clear();
+            ClearVoice();
+            sfx.SetMotif(levelIndex, brighter: levelIndex % 3 == 1, seed: levelIndex * 17 + 3);
+            sfx.SetMotifPlaying(true);
+            sfx.StingerStart();
+            if (phase == Phase.Play) Say("wake");
         }
 
         // ------------------------------------------------------------------ tutorial
@@ -1157,8 +1401,29 @@ namespace PointOfOrigin
             return false;
         }
 
+        bool SeedIsAnswer()
+        {
+            if (seeds.Count == 0) return false;
+            foreach (var s in seeds) if (!answer.Contains(s)) return false;
+            return true;
+        }
+
+        /// <summary>Within two cells of any outline cell: down in the chasm with it.</summary>
+        bool NearTarget()
+        {
+            var c = CellOf(PlayerCentre);
+            for (int dy = -2; dy <= 2; dy++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    var n = c + new Vector2Int(dx, dy);
+                    if (InBounds(n) && target[n.y * level.w + n.x] == Sim.Alive) return true;
+                }
+            return false;
+        }
+
         void UpdateTutorial(float dt)
         {
+            bool clear = grounded && !InsideTargetArea();
             switch (tut)
             {
                 case Tutorial.Move:
@@ -1166,46 +1431,85 @@ namespace PointOfOrigin
                     if (tutTimer > 0.5f) { tut = Tutorial.Jump; tutTimer = 0f; }
                     break;
                 case Tutorial.Jump:
-                    if (jumps > 0) tut = Tutorial.FindStone;
+                    if (jumps > 0) tut = Tutorial.FindOutline;
                     break;
-                case Tutorial.FindStone:
-                    if (seeds.Count > 0) tut = Tutorial.GetClear;
-                    else if (NearAnswer(1.6f)) tut = Tutorial.Plant;
+                case Tutorial.FindOutline:
+                    if (seeds.Count > 0) tut = SeedIsAnswer() ? Tutorial.GetClear2 : Tutorial.GetClear;
+                    else if (NearTarget()) tut = Tutorial.PlantAnywhere;
                     break;
-                case Tutorial.Plant:
-                    if (seeds.Count > 0) tut = Tutorial.GetClear;
-                    else if (!NearAnswer(3.5f)) tut = Tutorial.FindStone;
+                case Tutorial.PlantAnywhere:
+                    if (seeds.Count > 0) tut = SeedIsAnswer() ? Tutorial.GetClear2 : Tutorial.GetClear;
                     break;
                 case Tutorial.GetClear:
-                    if (phase != Phase.Play) tut = Tutorial.Cross;
-                    else if (seeds.Count == 0) tut = Tutorial.Plant;
-                    else if (grounded && !InsideTargetArea()) tut = Tutorial.Grow;
+                    if (phase != Phase.Play) tut = Tutorial.SeeResult;
+                    else if (seeds.Count == 0) tut = Tutorial.PlantAnywhere;
+                    else if (clear) tut = Tutorial.GrowFirst;
                     break;
-                case Tutorial.Grow:
+                case Tutorial.GrowFirst:
+                    if (phase != Phase.Play) tut = Tutorial.SeeResult;
+                    else if (seeds.Count == 0) tut = Tutorial.PlantAnywhere;
+                    else if (!clear && grounded) tut = Tutorial.GetClear;
+                    break;
+                case Tutorial.SeeResult:
+                    if (phase == Phase.Result && resultTime > 1.2f) tut = won ? Tutorial.Cross : Tutorial.RewindIt;
+                    else if (phase == Phase.Play) tut = Tutorial.RewindIt;
+                    break;
+                case Tutorial.RewindIt:
+                    if (phase == Phase.Play) tut = seeds.Count == 0 ? Tutorial.Reason : Tutorial.TakeBack;
+                    break;
+                case Tutorial.TakeBack:
+                    if (seeds.Count == 0) tut = Tutorial.Reason;
+                    else if (SeedIsAnswer()) tut = Tutorial.GetClear2;
+                    break;
+                case Tutorial.Reason:
+                    if (seeds.Count > 0) tut = SeedIsAnswer() ? Tutorial.GetClear2 : Tutorial.TakeBack;
+                    else if (NearAnswer(1.4f)) tut = Tutorial.PlantRight;
+                    break;
+                case Tutorial.PlantRight:
+                    if (seeds.Count > 0) tut = SeedIsAnswer() ? Tutorial.GetClear2 : Tutorial.TakeBack;
+                    else if (!NearAnswer(2.5f)) tut = Tutorial.Reason;
+                    break;
+                case Tutorial.GetClear2:
                     if (phase != Phase.Play) tut = Tutorial.Cross;
-                    else if (seeds.Count == 0) tut = Tutorial.Plant;
-                    else if (InsideTargetArea()) tut = Tutorial.GetClear;
+                    else if (seeds.Count == 0) tut = Tutorial.Reason;
+                    else if (!SeedIsAnswer()) tut = Tutorial.TakeBack;
+                    else if (clear) tut = Tutorial.GrowRight;
+                    break;
+                case Tutorial.GrowRight:
+                    if (phase != Phase.Play) tut = Tutorial.Cross;
+                    else if (seeds.Count == 0) tut = Tutorial.Reason;
+                    else if (!clear && grounded) tut = Tutorial.GetClear2;
                     break;
                 case Tutorial.Cross:
-                    if (phase == Phase.Play) tut = seeds.Count > 0 ? Tutorial.GetClear : Tutorial.Plant;   // rewound
+                    if (phase == Phase.Play) tut = seeds.Count == 0 ? Tutorial.Reason : (SeedIsAnswer() ? Tutorial.GetClear2 : Tutorial.TakeBack);
                     break;
             }
         }
 
         string TutorialText()
         {
+            string plant = L(GameAction.Plant), grow = L(GameAction.Grow), rewind = L(GameAction.Rewind);
             switch (tut)
             {
                 case Tutorial.Move: return $"Run with {L(GameAction.Left)} and {L(GameAction.Right)}.";
                 case Tutorial.Jump: return $"Jump with {L(GameAction.Jump)}. Hold it to jump higher, let go early for a hop.";
-                case Tutorial.FindStone: return "Your lantern shows the outline of what grew here. It grew from one stone, down in the chasm. Go to the marked cell.";
-                case Tutorial.Plant: return $"Stand on the stone and press {L(GameAction.Plant)} to plant a seed. ({L(GameAction.Plant)} again takes it back.)";
-                case Tutorial.GetClear: return "Growth takes whoever stands inside it. Jump back up onto the rock, away from the outline.";
-                case Tutorial.Grow: return $"Press {L(GameAction.Grow)}. The seed grows back into the outline, and the growth is solid ground.";
+                case Tutorial.FindOutline: return "Your lantern shows the outline of something that grew here: the framed cells down in the chasm. Go down to it.";
+                case Tutorial.PlantAnywhere: return $"Stand anywhere on the chasm floor and press {plant} to plant a seed. Anywhere. We will see what grows.";
+                case Tutorial.GetClear: return "Growth takes whoever stands inside it. Climb back up onto the rock, clear of the outline.";
+                case Tutorial.GrowFirst: return $"Press {grow}. The seed grows for two generations.";
+                case Tutorial.SeeResult:
+                    if (phase == Phase.Growing) return "Watch: gold where the growth matches the outline, red where it grew outside it.";
+                    return won ? "Exact, first time. The door is open." : "Red cells grew where the outline is not, and the door stays shut. It has to be exact.";
+                case Tutorial.RewindIt: return $"Press {rewind} to rewind. The growth clears; your seed stays where you planted it.";
+                case Tutorial.TakeBack: return $"That was not the origin. Stand on your seed and press {plant} to take it back.";
+                case Tutorial.Reason: return "Two generations reach two cells in every direction, so a bloom is five wide, and it began in the middle: the cell on the stone, marked. Go there.";
+                case Tutorial.PlantRight: return $"Press {plant} here. This is the origin.";
+                case Tutorial.GetClear2: return "Now get clear again: up onto the rock, away from the outline.";
+                case Tutorial.GrowRight: return $"Press {grow}.";
                 case Tutorial.Cross:
-                    if (phase == Phase.Growing) return "Watch it grow: gold cells match the outline, red cells do not.";
+                    if (phase == Phase.Growing) return "Gold all the way.";
                     return won ? "Exact. The door is open: cross the bloom and walk to it."
-                               : $"Not exact. {L(GameAction.Rewind)} rewinds the growth and keeps your seed; move it and try again.";
+                               : $"Not exact. {rewind} rewinds, {plant} takes the seed back; the origin is the middle of the outline.";
                 default: return "";
             }
         }
@@ -1219,7 +1523,9 @@ namespace PointOfOrigin
             lives = Mathf.Max(0, lives - 1);
             pVel = Vector2.zero;
             shake = shakeOn ? 0.45f : 0f;
-            sfx.Fail();
+            sfx.StingerDeath();
+            ClearVoice();
+            if (lives > 0) Say("die");
         }
 
         void RestartLevel()
@@ -1230,7 +1536,7 @@ namespace PointOfOrigin
             for (int i = 0; i < seen.Length && i < keepSeen.Length; i++)
                 if (keepSeen[i]) { seen[i] = true; seenAt[i] = keepSeenAt[i]; }
             phase = Phase.Play;
-            if (tut != Tutorial.Off) tut = Tutorial.FindStone;
+            if (tut != Tutorial.Off) tut = Tutorial.FindOutline;
         }
 
         void Retry()
@@ -1277,6 +1583,7 @@ namespace PointOfOrigin
             sim.Set(c.x, c.y, Sim.Alive);
             TrackChanges();
             sfx.Place();
+            Say("plant");
         }
 
         void Grow()
@@ -1285,6 +1592,7 @@ namespace PointOfOrigin
             attempts++;
             stepTimer = 0f;
             phase = Phase.Growing;
+            Say("grow");
         }
 
         void Advance()
@@ -1325,6 +1633,8 @@ namespace PointOfOrigin
                 unlocked = Mathf.Max(unlocked, Mathf.Min(levelIndex + 1, set.levels.Length - 1));
                 SavePrefs();
                 sfx.Success();
+                sfx.DoorChime();
+                Say("found");
                 if (exitCell.x < 0) Next();
             }
             else
@@ -1603,8 +1913,9 @@ namespace PointOfOrigin
             // fossils pressed into the stone, wherever the stone has been seen
             for (int i = 0; i < fossilPx.Length; i++)
                 if (allSeen || seen[fossilCell[i]]) px[fossilPx[i]] = fossilColor[i];
-            // the tutorial's beacon on the stone, drawn even into the unexplored dark
-            if (tut == Tutorial.FindStone || tut == Tutorial.Plant)
+            PaintHazards(now);
+            // the tutorial's beacon on the stone, once the player has reasoned it out, drawn even into the unexplored dark
+            if (tut == Tutorial.Reason || tut == Tutorial.PlantRight)
                 foreach (var a in answer) PaintDot(a.x, a.y, pulse > 0.5f ? ColLamp : ColSeedEdge);
             PaintBursts(now);
             tex.SetPixels32(px);
@@ -1654,6 +1965,105 @@ namespace PointOfOrigin
                     else c = ColRock;
                     if (top) c = Lighten(c, 0.28f);
                     px[row + dx] = c;
+                }
+            }
+        }
+
+        /// <summary>Acid, spikes, spouts and crumble drawn over the cells the main pass painted.</summary>
+        void PaintHazards(float now)
+        {
+            int tw = tex.width;
+            var clear = new Color32(0, 0, 0, 0);
+            foreach (int i in acid)
+            {
+                int gx = i % level.w, gy = i / level.w;
+                if (!(allSeen || seen[i])) continue;
+                int x0 = gx * CellPx, y0 = (level.h - 1 - gy) * CellPx;
+                bool surface = gy == 0 || !acid.Contains(i - level.w);
+                for (int dy = 0; dy < CellPx; dy++)
+                {
+                    int row = (y0 + dy) * tw + x0;
+                    for (int dx = 0; dx < CellPx; dx++)
+                    {
+                        // a slow wave along the surface, a few rising bubbles below it
+                        float wave = Mathf.Sin(now * 2.2f + (x0 + dx) * 0.55f) * 0.5f + 0.5f;
+                        int top = CellPx - 1 - (surface ? (int)(wave * 1.5f) : 0);
+                        Color32 c = ColAcid;
+                        if (surface && dy >= top - 1) c = ColAcidBright;
+                        else if (((x0 + dx) * 7 + (int)(now * 6f) + dy * 3) % 23 == 0) c = ColAcidBright;
+                        if (dy > top) c = clear;
+                        px[row + dx] = c;
+                    }
+                }
+            }
+            foreach (int i in spikes)
+            {
+                int gx = i % level.w, gy = i / level.w;
+                if (!(allSeen || seen[i])) continue;
+                int x0 = gx * CellPx, y0 = (level.h - 1 - gy) * CellPx;
+                // two spikes per cell, four pixels wide, pointing up
+                for (int dy = 0; dy < 6; dy++)
+                    for (int s = 0; s < 2; s++)
+                    {
+                        int half = dy / 2;   // 0..2: the spike narrows toward its point
+                        for (int dx = half; dx < 4 - half; dx++)
+                            px[(y0 + dy) * tw + x0 + s * 4 + dx] = dy < 2 ? ColRockEdge : ColSpike;
+                    }
+            }
+            for (int k = 0; k < spouts.Count; k++)
+            {
+                var s = spouts[k];
+                int i = s.y * level.w + s.x;
+                if (!(allSeen || seen[i])) continue;
+                int x0 = s.x * CellPx, y0 = (level.h - 1 - s.y) * CellPx;
+                int state = SpoutState(k, now);
+                // the vent: a dark slit in the rock's top with a glow that grows as it comes
+                for (int dx = 2; dx < CellPx - 2; dx++)
+                {
+                    px[(y0 + CellPx - 1) * tw + x0 + dx] = state == 0 ? ColCrack : ColFlame;
+                    px[(y0 + CellPx - 2) * tw + x0 + dx] = state == 2 ? ColFlameCore : ColCrack;
+                }
+                if (state == 0) continue;
+                int flameH = state == 2 ? SpoutHeight * CellPx : 3;
+                for (int h = 0; h < flameH; h++)
+                {
+                    int y = y0 + CellPx + h;
+                    if (y >= tex.height) break;
+                    float t = (float)h / (SpoutHeight * CellPx);
+                    int flick = (int)(Mathf.Sin(now * 31f + h * 1.7f + s.x) * 1.5f);
+                    int half = Mathf.Max(1, (int)((1f - t) * 3.5f) + (state == 1 ? -1 : 0));
+                    for (int dx = 4 - half + flick / 2; dx < 4 + half + flick / 2; dx++)
+                    {
+                        if (dx < 0 || dx >= CellPx) continue;
+                        px[y * tw + x0 + dx] = t < 0.35f ? ColFlameCore : (state == 1 ? ColFlameCore : ColFlame);
+                    }
+                }
+            }
+            foreach (int i in crumble)
+            {
+                int gx = i % level.w, gy = i / level.w;
+                if (!(allSeen || seen[i])) continue;
+                int x0 = gx * CellPx, y0 = (level.h - 1 - gy) * CellPx;
+                bool fallen = CrumbleFallen(i);
+                bool shaking = crumbleAt.ContainsKey(i) && !fallen && now - crumbleAt[i] <= CrumbleDelay;
+                if (fallen)
+                {
+                    // gone for now: a faint outline where it will come back
+                    for (int dy = 0; dy < CellPx; dy++)
+                        for (int dx = 0; dx < CellPx; dx++)
+                        {
+                            bool edge = dx == 0 || dy == 0 || dx == CellPx - 2 || dy == CellPx - 2;
+                            px[(y0 + dy) * tw + x0 + dx] = edge && ((dx + dy) & 1) == 0 ? ColRockEdge : clear;
+                        }
+                    continue;
+                }
+                int jitter = shaking ? ((int)(now * 40f) & 1) * 2 - 1 : 0;
+                // cracks: a diagonal and a fork, drawn dark over the grain
+                for (int d = 0; d < CellPx - 1; d++)
+                {
+                    int cx = Mathf.Clamp(d + jitter, 0, CellPx - 1);
+                    px[(y0 + d) * tw + x0 + cx] = ColCrack;
+                    if (d >= 3 && d < 6) px[(y0 + d) * tw + x0 + Mathf.Clamp(6 - d + jitter, 0, CellPx - 1)] = ColCrack;
                 }
             }
         }
@@ -1949,6 +2359,30 @@ namespace PointOfOrigin
             stButton = Make(19, FontStyle.Bold, TextAnchor.MiddleCenter, "e8ecf5");
             stRow = Make(21, FontStyle.Normal, TextAnchor.MiddleLeft, "e8ecf5");
             stRowValue = Make(17, FontStyle.Normal, TextAnchor.MiddleLeft, "8a93a8");
+            stVoice = Make(17, FontStyle.Italic, TextAnchor.MiddleLeft, "fff1cc");
+        }
+
+        /// <summary>The lantern's line, in a small bubble above the wanderer, typed out.</summary>
+        void DrawVoice()
+        {
+            if (voiceLine.Length == 0 || Paused || phase == Phase.Title || phase == Phase.Finished) return;
+            float s = S;
+            string shown = voiceLine.Substring(0, Mathf.Min(voiceShown, voiceLine.Length));
+            if (shown.Length == 0) return;
+            var head = cam.WorldToScreenPoint(new Vector3(pPos.x, pPos.y + PlayerH + 0.4f, 0f));
+            float maxW = Mathf.Min(440f * s, Screen.width - 48f * s);
+            var content = new GUIContent(voiceLine);
+            float textW = Mathf.Min(maxW - 28f * s, stVoice.CalcSize(content).x + 4f * s);
+            float textH = stVoice.CalcHeight(content, textW);
+            float w = textW + 28f * s, h = textH + 18f * s;
+            float x = Mathf.Clamp(head.x - w * 0.3f, 16f * s, Screen.width - w - 16f * s);
+            float y = Mathf.Clamp(Screen.height - head.y - h - 10f * s, 100f * s, Screen.height - h - 140f * s);
+            Panel(new Rect(x, y, w, h), new Color(0.07f, 0.09f, 0.14f, 0.92f));
+            Panel(new Rect(x, y + h - 3f * s, w, 3f * s), new Color(1f, 0.85f, 0.6f, 0.9f));
+            // the little tail toward the lantern
+            float tx = Mathf.Clamp(head.x, x + 12f * s, x + w - 12f * s);
+            Panel(new Rect(tx - 3f * s, y + h, 6f * s, 6f * s), new Color(1f, 0.85f, 0.6f, 0.9f));
+            GUI.Label(new Rect(x + 14f * s, y + 9f * s, textW, textH), shown, stVoice);
         }
 
         /// <summary>Ten segments, lit up to the value.</summary>
@@ -2011,6 +2445,9 @@ namespace PointOfOrigin
                     y += rowH;
                     GUI.Label(new Rect(page.x, y, page.width, 24f * s),
                         listening.HasValue ? "press the new key, or Esc to keep the old one" : "click a key to change it. The arrows, W and Enter always work as well.", stRowValue);
+                    y += 26f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 24f * s),
+                        (InputBridge.PadPresent ? "gamepad connected: " : "gamepad: ") + "stick or d-pad move, A jump, X plant, B grow, Y rewind, LB reveal, RB skip, Start menu, d-pad steers menus", stRowValue);
                     break;
                 }
                 case Overlay.Help:
@@ -2065,9 +2502,10 @@ namespace PointOfOrigin
 
         void DrawButtons(Vector2 gui)
         {
-            foreach (var b in buttons)
+            for (int bi = 0; bi < buttons.Count; bi++)
             {
-                bool hot = b.enabled && b.rect.Contains(gui);
+                var b = buttons[bi];
+                bool hot = b.enabled && (b.rect.Contains(gui) || bi == padFocus);
                 Color back = !b.enabled ? new Color(0.10f, 0.11f, 0.15f, 0.6f)
                     : hot ? new Color(0.30f, 0.36f, 0.48f, 0.95f)
                     : b.gold ? new Color(0.30f, 0.26f, 0.14f, 0.92f)
@@ -2245,6 +2683,7 @@ namespace PointOfOrigin
                 }
             }
 
+            DrawVoice();
             if (Paused) DrawOverlay();
             DrawButtons(gui);
         }

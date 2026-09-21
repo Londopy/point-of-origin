@@ -55,11 +55,23 @@ allowed; shipping late is not.
       three-tall column three from its stone); trenches there are now eight
       wide with the stone two from the cliff, and all ten chapters pass.
       Hints proofread against the new geometry.
-- [ ] 9:00 to 10:00 am: **feel pass from the notes**. Jump height, run speed,
-      ember speed, lantern radius, camera lead, the door's look.
-- [ ] 10:00 to 12:00: **chapter polish**. Tune the four new chapters from the
-      notes (ember timing in Quench and Ashfall, the ladder in Origin). If a
-      chapter cannot be made fair by noon, cut it rather than ship it broken.
+- [x] (Sunday 12:20 to Monday ~2:30 AM) **the second-playthrough pass**
+      (Londo: fun, too easy, repetitive maps, origins too similar, not enough
+      ways to die, tutorial does not explain completing the origin, rewind,
+      E): hazards (acid, spikes, fire spouts, crumbling rock) as map glyphs;
+      the tutorial makes you plant wrong first, see red, rewind, take back,
+      reason, plant right; ten chapters rebuilt around six distinct origin
+      deductions (fused slab, three sparks, post shadow, cut echo, bent echo,
+      cancelling pair) with the roads between them; the lantern's voice
+      (per-chapter lines on wake, seed, plant, grow, found, die); a 16-bit
+      tracker tune (pulse, FM bell, triangle bass, lo-fi) in a key per chapter
+      plus hazard sounds; gamepad support with d-pad menus; Nexium: hazard
+      glyphs, `say` lines, a deduction report per chapter, `tools/chapters.nx`.
+- [ ] 9:00 to 10:00 am: **feel pass from the notes**, and a hand playthrough
+      of the ten new chapters: hazard timing (spout period 3.2 s, flame 1 s;
+      crumble 0.45 s then gone 2.8 s), ember speed, voice pacing, music mix.
+- [ ] 10:00 to 12:00: **chapter polish** from that playthrough. If a chapter
+      cannot be made fair by noon, cut it rather than ship it broken.
 - [ ] 12:00 to 1:00 pm: **second playthrough, fresh eyes** (a housemate counts).
       Watch, do not help. Note every stall over thirty seconds.
 

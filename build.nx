@@ -59,6 +59,8 @@ fn main() -> u8 {
     if !run(bind_args[..]) { return 1 }
     let level_args = ["nx", "run", "tools/levels.nx", "--", "levels", levels_json[..], "--cli", CLI_BUILT, "--quiet"]
     if !run(level_args[..]) { return 1 }
+    let chapter_args = ["nx", "run", "tools/chapters.nx", "--", levels_json[..], "docs/chapters.md"]
+    if !run(chapter_args[..]) { return 1 }
     println("build: done", .{})
     return 0
 }

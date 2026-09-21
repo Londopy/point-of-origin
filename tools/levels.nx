@@ -37,6 +37,11 @@ struct Level {
     origins: List((i64, i64))
     pickups: List((i64, i64))
     embers: List((i64, i64, bool))     // x, y, patrols vertically
+    acid: List((i64, i64))             // `~` pools: rock to the automaton, deadly and not solid to the wanderer
+    spikes: List((i64, i64))           // `^` deadly to touch, air to the automaton
+    spouts: List((i64, i64))           // `f` vents in the rock that throw flame upward on a timer
+    crumble: List((i64, i64))          // `c` rock that falls away after you stand on it
+    says: List((String, String))       // (trigger, line): what the lantern says; triggers wake, plant, grow, found, die, seed
     start: (i64, i64)
     has_start: bool
     exit: (i64, i64)
@@ -50,6 +55,8 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         .name = String.new(), .hint = String.new(), .tip = String.new(), .intro = String.new(), .outro = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
         .pickups = List((i64, i64)).new(), .embers = List((i64, i64, bool)).new(),
+        .acid = List((i64, i64)).new(), .spikes = List((i64, i64)).new(), .spouts = List((i64, i64)).new(), .crumble = List((i64, i64)).new(),
+        .says = List((String, String)).new(),
         .start = (0, 0), .has_start = false, .exit = (0, 0), .has_exit = false, .w = 0, .h = 0,
     }
     var in_map = false
@@ -74,6 +81,19 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         else if key == "rule" { lv.rule = String.from(val) }
         else if key == "steps" { lv.steps = try val.parse_int(i64) }
         else if key == "seeds" { lv.seeds = try val.parse_int(i64) }
+        else if key == "say" {
+            // say wake|The lantern's line.
+            let parts = strings.split_once(val, "|") orelse {
+                eprintln("{}: a say line needs `trigger|text`: {}", .{path, val})
+                return error.InvalidInput
+            }
+            let trigger = parts.0.trim()
+            if !(trigger == "wake" or trigger == "plant" or trigger == "grow" or trigger == "found" or trigger == "die" or trigger == "seed" or trigger == "door") {
+                eprintln("{}: unknown say trigger `{}` (wake, plant, grow, found, die, seed, door)", .{path, trigger})
+                return error.InvalidInput
+            }
+            lv.says.append((String.from(trigger), String.from(parts.1.trim())))
+        }
         else {
             eprintln("{}: unknown key {}", .{path, key})
             return error.InvalidInput
@@ -95,6 +115,10 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
             if c == 'k' or c == 'K' { lv.pickups.append((x as i64, y as i64)) }
             if c == 'e' { lv.embers.append((x as i64, y as i64, false)) }
             if c == 'E' { lv.embers.append((x as i64, y as i64, true)) }
+            if c == '~' { lv.acid.append((x as i64, y as i64)) }
+            if c == '^' { lv.spikes.append((x as i64, y as i64)) }
+            if c == 'f' { lv.spouts.append((x as i64, y as i64)) }
+            if c == 'c' { lv.crumble.append((x as i64, y as i64)) }
             if c == 'x' or c == 'X' {
                 lv.exit = (x as i64, y as i64)
                 lv.has_exit = true
@@ -114,13 +138,19 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
 }
 
 /// The rock rows as one string: `#` rock, `.` anything else, `sep` between rows.
+/// Acid, spouts and crumble are rock as far as the automaton is concerned: nothing grows there.
 fn rock_text(lv: *Level, sep: []u8) -> String {
     var out = String.new()
     for row, i in lv.rows {
         if i > 0 { out.append(sep) }
-        for c in row[..] { out.push_byte(if c == '#' { '#' } else { '.' }) }
+        for c in row[..] { out.push_byte(if c == '#' or c == '~' or c == 'f' or c == 'c' { '#' } else { '.' }) }
     }
     return out
+}
+
+fn has_cell(cells: *List((i64, i64)), x: i64, y: i64) -> bool {
+    for c in cells.* { if c.0 == x and c.1 == y { return true } }
+    return false
 }
 
 /// Cells as `x,y;x,y`.
@@ -146,6 +176,51 @@ fn embers_text(lv: *Level) -> String {
         out.append(format("{},{},{}", .{e.0, e.1, if e.2 { "v" } else { "h" }})[..])
     }
     return out
+}
+
+/// The lantern's lines as `trigger|line||trigger|line`.
+fn says_text(lv: *Level) -> String {
+    var out = String.new()
+    for s, i in lv.says {
+        if i > 0 { out.append("||") }
+        out.append(s.0[..])
+        out.append("|")
+        out.append(s.1[..])
+    }
+    return out
+}
+
+/// How much of a puzzle the origin is: the number of cells inside the target's bounding box the
+/// wanderer could stand in (air over something solid), and whether an origin sits at the box's centre,
+/// where a player who has stopped thinking will plant first.
+fn deduction(lv: *Level, target: []u8, rock: []u8) -> (i64, bool) {
+    var minx: i64 = lv.w; var maxx: i64 = -1; var miny: i64 = lv.h; var maxy: i64 = -1
+    for y in 0..lv.h {
+        for x in 0..lv.w {
+            if target[(y * lv.w + x) as usize] == '#' {
+                if x < minx { minx = x }
+                if x > maxx { maxx = x }
+                if y < miny { miny = y }
+                if y > maxy { maxy = y }
+            }
+        }
+    }
+    if maxx < 0 { return (0, false) }
+    var candidates: i64 = 0
+    for y in miny..(maxy + 1) {
+        for x in minx..(maxx + 1) {
+            let here = rock[(y * lv.w + x) as usize] == '#'
+            let below = y + 1 >= lv.h or rock[((y + 1) * lv.w + x) as usize] == '#'
+            if !here and below { candidates += 1 }
+        }
+    }
+    let cx = (minx + maxx) / 2
+    let cy = (miny + maxy) / 2
+    var centred = false
+    for o in lv.origins {
+        if (o.0 == cx or (minx + maxx) % 2 == 1 and o.0 == cx + 1) and (o.1 == cy or o.1 == cy + 1 or o.1 == maxy) { centred = true }
+    }
+    return (candidates, centred)
 }
 
 fn num_of(v: *json.Json, key: []u8) -> f64 {
@@ -182,7 +257,11 @@ fn preview(lv: *Level, target: []u8, rock: []u8) {
             let i = (y * lv.w + x) as usize
             let alive = i < target.len and target[i] == '#'
             let is_rock = i < rock.len and rock[i] == '#'
-            if is_rock { line.push_byte('X') }
+            if has_cell(&lv.acid, x, y) { line.push_byte('~') }
+            else if has_cell(&lv.spouts, x, y) { line.push_byte('f') }
+            else if has_cell(&lv.crumble, x, y) { line.push_byte('c') }
+            else if has_cell(&lv.spikes, x, y) { line.push_byte('^') }
+            else if is_rock { line.push_byte('X') }
             else if lv.has_start and lv.start.0 == x and lv.start.1 == y { line.push_byte('S') }
             else if lv.has_exit and lv.exit.0 == x and lv.exit.1 == y { line.push_byte('x') }
             else if is_pickup(lv, x, y) { line.push_byte('k') }
@@ -268,6 +347,19 @@ fn main() -> u8 {
         json.set(&mut obj, "embers", json.string(embers[..]))
         let exit = if lv.has_exit { format("{},{}", .{lv.exit.0, lv.exit.1}) } else { String.new() }
         json.set(&mut obj, "exit", json.string(exit[..]))
+        let acid = cells_text(&lv.acid)
+        json.set(&mut obj, "acid", json.string(acid[..]))
+        let spikes = cells_text(&lv.spikes)
+        json.set(&mut obj, "spikes", json.string(spikes[..]))
+        let spouts = cells_text(&lv.spouts)
+        json.set(&mut obj, "spouts", json.string(spouts[..]))
+        let crumble = cells_text(&lv.crumble)
+        json.set(&mut obj, "crumble", json.string(crumble[..]))
+        let says = says_text(&lv)
+        json.set(&mut obj, "says", json.string(says[..]))
+        let ded = deduction(&lv, target, rock_flat[..])
+        json.set(&mut obj, "candidates", json.number(ded.0 as f64))
+        json.set(&mut obj, "centred", json.number(if ded.1 { 1.0 } else { 0.0 }))
         json.push(&mut levels, obj)
         count += 1
         let solutions = num_of(&grown, "solutions")
@@ -282,6 +374,7 @@ fn main() -> u8 {
         } else if solutions > 1.0 {
             println("levels: {} has {} seed placements that work", .{lv.name, solutions as i64})
         }
+        println("levels: {}: {} places to stand inside the outline, origin {}", .{lv.name, ded.0, if ded.1 { "AT THE CENTRE (no deduction needed)" } else { "off centre" }})
     }
     if count == 0 {
         eprintln("levels: no .origin files in {}", .{src_dir})

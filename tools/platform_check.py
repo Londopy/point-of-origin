@@ -86,6 +86,10 @@ class World:
         self.grown = grown
         self.target = lv["target"]
         self.cells = None
+        # hazards: acid and spikes kill on touch and are never solid; a spout's two flame cells are
+        # passable between bursts (timing is the player's problem); crumble is ordinary rock here
+        self.deadly = set(parse_cells(lv.get("acid", ""))) | set(parse_cells(lv.get("spikes", "")))
+        self.not_solid = set(parse_cells(lv.get("acid", "")))
         if grown and carve is not None:
             origins = parse_cells(lv["origins"])
             prints = solo_footprints(lv)
@@ -100,6 +104,8 @@ class World:
         if y < 0 or y >= self.h:
             return False
         i = y * self.w + x
+        if (x, y) in self.not_solid:
+            return False
         if self.rock[i] == "#":
             return True
         if not self.grown:
@@ -109,14 +115,16 @@ class World:
         return self.target[i] == "#"
 
     def air(self, x, y):
-        return 0 <= x < self.w and 0 <= y < self.h and not self.solid(x, y)
+        return 0 <= x < self.w and 0 <= y < self.h and not self.solid(x, y) and (x, y) not in self.deadly
 
     def standing(self, x, y):
         return self.air(x, y) and self.solid(x, y + 1)
 
     def land(self, x, y):
-        """Fall from an air cell to the first standing cell below, or None into the void."""
+        """Fall from an air cell to the first standing cell below, or None into the void or a hazard."""
         while y < self.h:
+            if (x, y) in self.deadly:
+                return None
             if self.standing(x, y):
                 return (x, y)
             if not self.air(x, y):

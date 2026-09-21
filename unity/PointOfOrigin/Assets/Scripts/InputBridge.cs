@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 
 namespace PointOfOrigin
 {
@@ -138,16 +139,106 @@ namespace PointOfOrigin
             try { return kb[key].isPressed; } catch (ArgumentException) { return false; }
         }
 
+        // ------------------------------------------------------------------ gamepad: a fixed layout
+
+        /// <summary>The pad's buttons for an action; the sticks and d-pad handle Left and Right.</summary>
+        static IEnumerable<ButtonControl> PadButtons(Gamepad pad, GameAction action)
+        {
+            switch (action)
+            {
+                case GameAction.Jump: yield return pad.buttonSouth; break;
+                case GameAction.Plant: yield return pad.buttonWest; break;
+                case GameAction.Grow: yield return pad.buttonEast; break;
+                case GameAction.Confirm: yield return pad.buttonSouth; yield return pad.buttonEast; yield return pad.startButton; break;
+                case GameAction.Rewind: yield return pad.buttonNorth; break;
+                case GameAction.Reveal: yield return pad.leftShoulder; break;
+                case GameAction.Skip: yield return pad.rightShoulder; break;
+                case GameAction.Menu: yield return pad.startButton; break;
+                case GameAction.Left: yield return pad.dpad.left; break;
+                case GameAction.Right: yield return pad.dpad.right; break;
+            }
+        }
+
+        public static string PadLabel(GameAction action)
+        {
+            switch (action)
+            {
+                case GameAction.Left: case GameAction.Right: return "stick or d-pad";
+                case GameAction.Jump: return "A";
+                case GameAction.Plant: return "X";
+                case GameAction.Grow: return "B";
+                case GameAction.Rewind: return "Y";
+                case GameAction.Reveal: return "LB";
+                case GameAction.Skip: return "RB";
+                case GameAction.Menu: return "Start";
+                case GameAction.Mute: return "(settings)";
+                default: return "";
+            }
+        }
+
+        public static bool PadPresent => Gamepad.current != null;
+
+        static bool PadPressed(GameAction action)
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return false;
+            foreach (var b in PadButtons(pad, action)) if (b.wasPressedThisFrame) return true;
+            if (action == GameAction.Left) return pad.leftStick.left.wasPressedThisFrame;
+            if (action == GameAction.Right) return pad.leftStick.right.wasPressedThisFrame;
+            return false;
+        }
+
+        static bool PadHeld(GameAction action)
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return false;
+            foreach (var b in PadButtons(pad, action)) if (b.isPressed) return true;
+            if (action == GameAction.Left) return pad.leftStick.ReadValue().x < -0.45f;
+            if (action == GameAction.Right) return pad.leftStick.ReadValue().x > 0.45f;
+            return false;
+        }
+
+        /// <summary>Menu navigation on a pad: -1 up, +1 down, 0 nothing, this frame.</summary>
+        public static int PadMenuStep()
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return 0;
+            if (pad.dpad.up.wasPressedThisFrame || pad.leftStick.up.wasPressedThisFrame) return -1;
+            if (pad.dpad.down.wasPressedThisFrame || pad.leftStick.down.wasPressedThisFrame) return 1;
+            return 0;
+        }
+
+        public static int PadMenuSide()
+        {
+            var pad = Gamepad.current;
+            if (pad == null) return 0;
+            if (pad.dpad.left.wasPressedThisFrame || pad.leftStick.left.wasPressedThisFrame) return -1;
+            if (pad.dpad.right.wasPressedThisFrame || pad.leftStick.right.wasPressedThisFrame) return 1;
+            return 0;
+        }
+
+        public static bool PadActivate()
+        {
+            var pad = Gamepad.current;
+            return pad != null && (pad.buttonSouth.wasPressedThisFrame || pad.buttonEast.wasPressedThisFrame);
+        }
+
+        public static bool PadBack()
+        {
+            var pad = Gamepad.current;
+            return pad != null && (pad.startButton.wasPressedThisFrame || pad.selectButton.wasPressedThisFrame);
+        }
+
         public static bool Pressed(GameAction action)
         {
             foreach (var k in Keys(action)) if (KeyDown(k)) return true;
-            return false;
+            return PadPressed(action);
         }
 
         public static bool Held(GameAction action)
         {
             foreach (var k in Keys(action)) if (KeyHeld(k)) return true;
-            return false;
+            return PadHeld(action);
         }
 
         /// <summary>The first key pressed this frame, for rebinding: any key counts except None.</summary>

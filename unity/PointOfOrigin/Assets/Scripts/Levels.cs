@@ -29,8 +29,29 @@ namespace PointOfOrigin
         public string pickups;  // "x,y;x,y" seeds lying in the world; empty means the seeds are carried from the start
         public string embers;   // "x,y,h;x,y,v" embers patrolling a row (h) or a column (v)
         public string exit;     // "x,y" the door that opens once the growth is exact
+        public string acid;     // "x,y;x,y" pools: not solid, deadly (rock to the automaton)
+        public string spikes;   // "x,y;x,y" deadly to touch, open to the automaton
+        public string spouts;   // "x,y;x,y" vents in the rock that throw flame two cells up on a timer
+        public string crumble;  // "x,y;x,y" rock that falls away shortly after you stand on it
+        public string says;     // "trigger|line||trigger|line": what the lantern says at wake, plant, grow, found, die
+
+        public List<(string trigger, string line)> Lines()
+        {
+            var list = new List<(string, string)>();
+            if (string.IsNullOrEmpty(says)) return list;
+            foreach (var entry in says.Split(new[] { "||" }, StringSplitOptions.None))
+            {
+                int bar = entry.IndexOf('|');
+                if (bar > 0) list.Add((entry.Substring(0, bar).Trim(), entry.Substring(bar + 1).Trim()));
+            }
+            return list;
+        }
 
         public byte[] RockCells() => Cells(rock, Sim.Rock);
+        public List<Vector2Int> AcidCells() => ParseCells(acid);
+        public List<Vector2Int> SpikeCells() => ParseCells(spikes);
+        public List<Vector2Int> SpoutCells() => ParseCells(spouts);
+        public List<Vector2Int> CrumbleCells() => ParseCells(crumble);
 
         public Vector2Int? ExitCell()
         {
