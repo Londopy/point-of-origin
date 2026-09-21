@@ -132,6 +132,12 @@ namespace PointOfOrigin
         Color32[] px;
         SpriteRenderer worldSr;
         SpriteRenderer bgSr;
+        SpriteRenderer farSr;    // Houdini-generated ruin skylines, parallax
+        SpriteRenderer nearSr;
+        Sprite[] heroFrames;     // Blender-rendered wanderer, when present
+        float animClock;
+        readonly List<Vector2[]> burstFrames = new List<Vector2[]>();   // Houdini-simulated growth burst
+        readonly List<(Vector2Int cell, float t0)> bursts = new List<(Vector2Int, float)>();
         SpriteRenderer playerSr;
         SpriteRenderer glowSr;
         Sprite emberSprite;
@@ -224,6 +230,49 @@ namespace PointOfOrigin
             emberSprite = Sprite.Create(MakeDot(6, ColEmber, ColEmberCore), new Rect(0, 0, 6, 6), new Vector2(0.5f, 0.5f), CellPx);
             seedSprite = Sprite.Create(MakeDot(5, ColSeed, ColSeedEdge), new Rect(0, 0, 5, 5), new Vector2(0.5f, 0.5f), CellPx);
 
+            // the wanderer rendered in Blender, if the frames shipped; otherwise the pixel figure above
+            var f0 = Resources.Load<Texture2D>("Sprites/wanderer_0");
+            var f1 = Resources.Load<Texture2D>("Sprites/wanderer_1");
+            if (f0 != null)
+            {
+                heroFrames = new[]
+                {
+                    Sprite.Create(f0, new Rect(0, 0, f0.width, f0.height), new Vector2(0.5f, 0f), f0.height),
+                    Sprite.Create(f1 != null ? f1 : f0, new Rect(0, 0, f0.width, f0.height), new Vector2(0.5f, 0f), f0.height),
+                };
+                playerSr.sprite = heroFrames[0];
+            }
+
+            // the ruin skylines Houdini generated: two parallax layers behind the world
+            var sky = Resources.Load<TextAsset>("Backdrop/skyline");
+            if (sky != null)
+            {
+                foreach (var line in sky.text.Split('\n'))
+                {
+                    var parts = line.Trim().Split(':');
+                    if (parts.Length != 2) continue;
+                    var heights = ParseFloats(parts[1]);
+                    if (heights.Count < 8) continue;
+                    bool far = parts[0].Trim() == "far";
+                    var sr = MakeSkyline(heights, far ? Hex("0f1322") : Hex("151a2d"), far ? -9 : -8);
+                    if (far) farSr = sr; else nearSr = sr;
+                }
+            }
+
+            // the growth burst Houdini simulated: one frame per line, x y pairs in cells
+            var burst = Resources.Load<TextAsset>("Backdrop/burst");
+            if (burst != null)
+            {
+                foreach (var line in burst.text.Split('\n'))
+                {
+                    var values = ParseFloats(line);
+                    if (values.Count < 2) continue;
+                    var frame = new Vector2[values.Count / 2];
+                    for (int i = 0; i < frame.Length; i++) frame[i] = new Vector2(values[i * 2], values[i * 2 + 1]);
+                    burstFrames.Add(frame);
+                }
+            }
+
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
             muted = PlayerPrefs.GetInt(KeyMuted, 0) != 0;
@@ -299,6 +348,40 @@ namespace PointOfOrigin
             t.SetPixels32(pixels);
             t.Apply(false);
             return t;
+        }
+
+        static List<float> ParseFloats(string text)
+        {
+            var list = new List<float>();
+            foreach (var tok in text.Split(new[] { ' ', '\t', ',' }, StringSplitOptions.RemoveEmptyEntries))
+                if (float.TryParse(tok, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
+                    list.Add(v);
+            return list;
+        }
+
+        /// <summary>A silhouette texture from a height profile (one sample per cell), filled below the profile.</summary>
+        SpriteRenderer MakeSkyline(List<float> heights, Color32 color, int order)
+        {
+            int w = heights.Count * CellPx;
+            float maxH = 0f;
+            foreach (var h in heights) maxH = Mathf.Max(maxH, h);
+            int hPx = Mathf.CeilToInt(maxH * CellPx) + CellPx;
+            var t = new Texture2D(w, hPx, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[w * hPx];
+            var clear = new Color32(0, 0, 0, 0);
+            for (int x = 0; x < w; x++)
+            {
+                int top = Mathf.RoundToInt(heights[x / CellPx] * CellPx);
+                for (int y = 0; y < hPx; y++) pixels[y * w + x] = y < top ? color : clear;
+            }
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            var go = new GameObject(order == -9 ? "Skyline far" : "Skyline near");
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = Sprite.Create(t, new Rect(0, 0, w, hPx), Vector2.zero, CellPx);
+            sr.sortingOrder = order;
+            sr.sharedMaterial = worldSr.sharedMaterial;
+            return sr;
         }
 
         static Texture2D MakeDot(int size, Color32 rim, Color32 core)
@@ -682,6 +765,9 @@ namespace PointOfOrigin
             bgSr.transform.position = new Vector3(camBase.x, camBase.y, 5f);
             float aspect = Mathf.Max(0.1f, cam.aspect);
             bgSr.transform.localScale = new Vector3(2f * cam.orthographicSize * aspect * 1.04f, 2f * cam.orthographicSize * 1.04f, 1f);
+            // parallax: the skylines slide slower than the world and sit just below the ground line
+            if (farSr != null) farSr.transform.position = new Vector3(camBase.x * 0.75f - 24f, -1.5f, 4f);
+            if (nearSr != null) nearSr.transform.position = new Vector3(camBase.x * 0.5f - 24f, -1.0f, 3f);
         }
 
         // ------------------------------------------------------------------ title demo
@@ -932,9 +1018,41 @@ namespace PointOfOrigin
             for (int i = 0; i < prevCells.Length; i++)
             {
                 byte c = sim.Cells[i], p = prevCells[i];
-                if (c == Sim.Alive && p != Sim.Alive) bornAt[i] = now;
+                if (c == Sim.Alive && p != Sim.Alive)
+                {
+                    bornAt[i] = now;
+                    if (phase == Phase.Growing && burstFrames.Count > 0 && bursts.Count < 400)
+                        bursts.Add((new Vector2Int(i % level.w, i / level.w), now));
+                }
                 else if (c != Sim.Alive && p == Sim.Alive) diedAt[i] = now;
                 prevCells[i] = c;
+            }
+        }
+
+        /// <summary>Replay the baked burst around every cell born recently: warm sparks that fade.</summary>
+        void PaintBursts(float now)
+        {
+            if (burstFrames.Count == 0 || bursts.Count == 0) return;
+            const float frameSeconds = 1f / 30f;
+            int tw = tex.width, th = tex.height;
+            for (int b = bursts.Count - 1; b >= 0; b--)
+            {
+                var (cell, t0) = bursts[b];
+                int f = (int)((now - t0) / frameSeconds);
+                if (f >= burstFrames.Count) { bursts.RemoveAt(b); continue; }
+                float fade = 1f - (float)f / burstFrames.Count;
+                var col = Color32.Lerp(ColLamp, ColEmberCore, 0.4f);
+                col = Color32.Lerp(new Color32(col.r, col.g, col.b, 0), col, Mathf.Clamp01(fade * 1.6f));
+                float cx = cell.x * CellPx + CellPx / 2f;
+                float cy = (level.h - 1 - cell.y) * CellPx + CellPx / 2f;
+                foreach (var p in burstFrames[f])
+                {
+                    int x = Mathf.RoundToInt(cx + p.x * CellPx * 0.7f), y = Mathf.RoundToInt(cy + p.y * CellPx * 0.7f);
+                    if (x < 0 || y < 0 || x >= tw - 1 || y >= th - 1) continue;
+                    px[y * tw + x] = col;
+                    px[y * tw + x + 1] = col;
+                    px[(y + 1) * tw + x] = col;
+                }
             }
         }
 
@@ -1004,6 +1122,7 @@ namespace PointOfOrigin
                     if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
+            PaintBursts(now);
             tex.SetPixels32(px);
             tex.Apply(false);
         }
@@ -1061,6 +1180,13 @@ namespace PointOfOrigin
                 playerSr.transform.position = new Vector3(pPos.x, pPos.y - sink * 0.8f, -1f);
                 playerSr.transform.localScale = new Vector3(1f, 1f - sink * 0.6f, 1f);
                 playerSr.flipX = !facingRight;
+                if (heroFrames != null)
+                {
+                    bool running = grounded && Mathf.Abs(pVel.x) > 0.5f;
+                    if (running) animClock += Time.deltaTime; else animClock = 0f;
+                    int frame = !grounded ? 1 : running && ((int)(animClock / 0.14f) % 2 == 1) ? 1 : 0;
+                    playerSr.sprite = heroFrames[frame];
+                }
                 playerSr.color = Color.Lerp(Color.white, new Color(0.35f, 0.25f, 0.25f, 1f), sink);
                 var centre = PlayerCentre;
                 glowSr.transform.position = new Vector3(centre.x, centre.y, -0.5f);

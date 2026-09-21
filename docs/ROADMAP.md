@@ -19,6 +19,8 @@ allowed; shipping late is not.
       coyote time, variable jump), growth as terrain, doors, six side-view
       chapters, a reachability checker (`tools/platform_check.py`), scripted
       physics tests, build.
+- [x] **assets pass**: Houdini parallax skylines and a baked growth burst,
+      a Blender-rendered wanderer, all replayed from text and PNGs in Resources.
 - [ ] 10:30 to 11:30 pm: **first hand playthrough (Londo)**. Play chapters 1 to 6
       with a notepad: does jumping feel right, is the stone reachable, did you
       understand "plant, get clear, grow", where did you die and was it fair.

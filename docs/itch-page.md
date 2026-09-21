@@ -36,10 +36,12 @@ attempt if you want one.
 - V: reveal the designer's origins after two failed attempts
 - M: sound on or off, Esc: menu
 
-**Made with:** Odin (simulation core, as a native DLL), Nexium (build pipeline,
-binding generator and level compiler), Unity 6 (C#), Houdini (the stone slab
-under the world). Made solo for CPGD's World's First Game Jam, theme ORIGIN.
-Windows, 64-bit.
+**Made with:** Odin (the cellular-automaton core, as a native DLL), Nexium
+(the build pipeline, the C# binding generator and the level compiler), Unity 6
+(C#: the platformer, the world painter, the HUD, synthesised audio), Houdini
+(the parallax ruin skylines and the simulated growth burst, baked to text and
+replayed by the game) and Blender (the wanderer, rendered flat-shaded). Made
+solo for CPGD's World's First Game Jam, theme ORIGIN. Windows, 64-bit.
 
 **Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
 `PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a
