@@ -109,6 +109,8 @@ namespace PointOfOrigin
         bool fetching;                                                     // this level's seeds must be found first
 
         WorldView view;
+        GameObject baseObj;
+        Bounds baseBounds;   // world bounds of the unscaled base mesh
         Camera cam;
         Vector3 camBase;
         Sfx sfx;
@@ -173,6 +175,22 @@ namespace PointOfOrigin
             var world = new GameObject("World");
             view = world.AddComponent<WorldView>();
             view.Init(new Material(shader));
+
+            // the stone slab under the world: modelled in Houdini, written out as a triangle list with baked vertex colours
+            var baseText = Resources.Load<TextAsset>("Models/DioramaBase");
+            if (baseText != null && shader != null)
+            {
+                var baseMesh = MeshText.Load(baseText, "diorama base");
+                if (baseMesh.vertexCount > 0)
+                {
+                    baseObj = new GameObject("Diorama Base");
+                    baseObj.AddComponent<MeshFilter>().sharedMesh = baseMesh;
+                    var mr = baseObj.AddComponent<MeshRenderer>();
+                    mr.sharedMaterial = new Material(shader);
+                    mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    baseBounds = baseMesh.bounds;
+                }
+            }
 
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
@@ -239,8 +257,19 @@ namespace PointOfOrigin
             winAt = -10f;
 
             TrackChanges();
+            FitBase();
             FitCamera();
             BuildWorld();
+        }
+
+        /// <summary>Stretch the slab to the level's footprint and tuck its top just under the tiles.</summary>
+        void FitBase()
+        {
+            if (baseObj == null || baseBounds.size.x < 0.01f || baseBounds.size.z < 0.01f) return;
+            float sx = (level.w + 2.4f) / baseBounds.size.x;
+            float sz = (level.h + 2.4f) / baseBounds.size.z;
+            baseObj.transform.localScale = new Vector3(sx, 1f, sz);
+            baseObj.transform.position = new Vector3(-baseBounds.center.x * sx, (TileBottom - 0.03f) - baseBounds.max.y, -baseBounds.center.z * sz);
         }
 
         /// <summary>World position of a cell's centre at the floor plane: row 0 is the far edge.</summary>
@@ -257,7 +286,8 @@ namespace PointOfOrigin
             float ex = 0f, ey = 0f;
             for (int i = 0; i < 8; i++)
             {
-                var p = new Vector3((i & 1) == 0 ? -hw : hw, (i & 2) == 0 ? TileBottom : RockTop + 0.4f, (i & 4) == 0 ? -hh : hh);
+                float low = baseObj != null ? TileBottom - baseBounds.size.y - 0.03f : TileBottom;
+                var p = new Vector3((i & 1) == 0 ? -hw : hw, (i & 2) == 0 ? low : RockTop + 0.4f, (i & 4) == 0 ? -hh : hh);
                 var v = m.MultiplyPoint(p);
                 ex = Mathf.Max(ex, Mathf.Abs(v.x));
                 ey = Mathf.Max(ey, Mathf.Abs(v.y));
