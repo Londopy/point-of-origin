@@ -5,8 +5,8 @@
 **Tagline:** You are shown how it ended. Find where it began.
 
 **Short description (for the jam listing):**
-You wake in the dark where something ended. Walk the ruins by lantern light,
-work out where it all began, plant the seed there, and grow it back.
+A platformer where the puzzle is the ground. Find where each ruin began, plant
+a seed there, get clear, and grow it back: the growth is the bridge to the door.
 
 **Description:**
 
@@ -15,24 +15,23 @@ born next to exactly one neighbour, or alive only when the neighbour count is
 odd, or keep everything you make. Something ended here, and you wake in the
 dark among its ruins.
 
-Your lantern shows only what is near you, and the ground itself rises out of
-the void as you walk it, so explore: click where you want to go and the
-wanderer finds a way around the rock. As the ruins reveal themselves, work out
-where it all began. Stand there, plant the seed, and press Grow. Gold where
-your growth matches the outline, red where it does not. Match it exactly and
-you have found the point of origin. Twenty chapters across four laws, from a
-single ripple to three springs behind a broken wall; in the later chapters the
-seeds lie hidden in the world and must be found and carried. Mind your feet:
-living growth overgrows whoever stands on it, and embers patrol the ruins. Three
-lanterns per chapter. Progress is saved, and a tip appears after a failed
+Your lantern shows only what is near you, so run and jump through the ruins to
+find the ghost of what grew here and work out where it began. Stand on that
+spot, plant the seed, get clear, and press Grow. The living cells rise as solid
+ground: gold where they match the outline, red where they do not. Match it
+exactly and the door opens, and the growth is the bridge that carries you
+there. Six chapters across four laws, from a single bloom over a chasm to two
+springs and a shaft between walls. Mind your feet: growth overgrows whoever
+stands inside it, the void takes whoever falls, and embers patrol the ruins.
+Three lanterns per chapter. Progress is saved, and a tip appears after a failed
 attempt if you want one.
 
 **Controls:**
 
-- Click a cell: walk there (or WASD / arrows)
-- Space: plant or remove a seed where you stand
-- Enter: grow (again to finish instantly, again for the next level)
-- R: rewind to your seeds
+- A / D or arrows: run; Space: jump
+- E: plant or take back a seed where you stand
+- Enter: grow (again to finish instantly)
+- R: rewind the growth (seeds stay planted)
 - N: skip a level
 - V: reveal the designer's origins after two failed attempts
 - M: sound on or off, Esc: menu

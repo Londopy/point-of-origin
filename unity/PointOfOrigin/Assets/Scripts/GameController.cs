@@ -6,49 +6,47 @@ using UnityEngine.InputSystem;
 namespace PointOfOrigin
 {
     /// <summary>
-    /// The whole game. Loads levels.json, drives the Odin simulation through
-    /// Sim, paints the grid into one point-filtered texture on a sprite, and
-    /// draws the HUD with IMGUI. Clicks are resolved in Update so a button
-    /// never fires twice across IMGUI's layout and repaint passes.
+    /// The whole game as a side-scrolling platformer. Loads levels.json, drives
+    /// the Odin simulation through Sim, paints the world into one point-filtered
+    /// texture on a sprite, moves the wanderer with tile collision, and draws the
+    /// HUD with IMGUI. Living growth is solid ground and the door opens only when
+    /// the growth is exact.
     /// </summary>
     public class GameController : MonoBehaviour
     {
-        enum Phase { Title, Story, Place, Growing, Result, Dead, GameOver, Finished }
+        enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         class Ember
         {
             public Vector2Int cell;
             public Vector2Int dir;
-            public Vector2 pos;
+            public Vector2 pos;      // grid coordinates
+            public SpriteRenderer sr;
         }
 
-        const int StartLives = 3;             // lanterns per chapter
-        const float DeathSeconds = 1.4f;      // the fall, before the chapter restarts
-        const float EmberSpeed = 2.4f;        // cells per second
-
-        const string Epilogue =
-            "Every origin found. The world grows again, and you, who were its last seed, walk on in the light.";
-
-        const int CellPx = 8;                 // texture pixels per cell; the last row and column are the gap
-        const float StepInterval = 0.24f;     // seconds per generation while growing
+        const int CellPx = 8;
+        const float StepInterval = 0.26f;     // seconds per generation while growing
         const float WinThreshold = 0.999f;
         const int RevealAfter = 2;            // failed attempts before Reveal is offered
-        const float PopSeconds = 0.2f;        // a born cell grows to full size over this long
-        const float AfterglowSeconds = 0.4f;  // a dead cell fades out over this long
+        const float PopSeconds = 0.2f;
+        const float AfterglowSeconds = 0.4f;
+        const float LanternRadius = 6f;
+        const int StartLives = 3;
+        const float DeathSeconds = 1.4f;
+        const float EmberSpeed = 2.4f;        // cells per second
+        const float Gravity = 30f;
+        const float JumpVelocity = 11.5f;
+        const float RunSpeed = 7f;
+        const float CoyoteTime = 0.1f;
+        const float JumpBufferTime = 0.12f;
+        const float PlayerW = 0.66f;
+        const float PlayerH = 0.92f;
+        const float MaxDt = 1f / 30f;
         const string KeyUnlocked = "po.unlocked";
         const string KeySolved = "po.solved";
         const string KeyMuted = "po.muted";
-        const float LanternRadius = 3f;       // cells revealed and lit around the wanderer
-        const float WalkSpeed = 11f;          // cells per second
-        const float KeyRepeat = 0.1f;         // seconds between steps while a direction key is held
-        const float CamPitch = 32f;           // the isometric camera
-        const float CamYaw = 45f;
-        const float TileSize = 0.90f;         // footprint of a tile inside its 1x1 cell
-        const float TileBottom = -0.55f;      // slabs reach this far down into the void
-        const float FloorTop = 0.20f;         // top of an ordinary tile
-        const float RockTop = 0.95f;
-        const float AliveTop = 0.46f;         // a living cell's top, plus a little per generation of age
-        const float RiseSeconds = 0.35f;      // a revealed tile rises out of the void over this long
+        const string Epilogue =
+            "Every origin found. The world grows again, and you, who were its last seed, walk on in the light.";
 
         static Color32 Hex(string hex)
         {
@@ -60,10 +58,10 @@ namespace PointOfOrigin
         static readonly Color32 ColBgCentre = Hex("161c2c");
         static readonly Color32 ColBgEdge = Hex("06070b");
         static readonly Color32 ColGap = Hex("05060a");
-        static readonly Color32 ColOpen = Hex("141824");
-        static readonly Color32 ColOpenEdge = Hex("181d2b");
-        static readonly Color32 ColRock = Hex("343a47");
-        static readonly Color32 ColRockEdge = Hex("222733");
+        static readonly Color32 ColOpen = Hex("10131c");
+        static readonly Color32 ColOpenEdge = Hex("141826");
+        static readonly Color32 ColRock = Hex("3a4150");
+        static readonly Color32 ColRockEdge = Hex("262b37");
         static readonly Color32 ColGhost = Hex("2a6d74");
         static readonly Color32 ColGhostBright = Hex("4fb4bd");
         static readonly Color32 ColSeed = Hex("6fe3ff");
@@ -72,15 +70,16 @@ namespace PointOfOrigin
         static readonly Color32 ColWrongEdge = Hex("e0566a");
         static readonly Color32 ColAfter = Hex("4d3a3c");
         static readonly Color32 ColReveal = Hex("ff5fd2");
-        static readonly Color32 ColUnknown = Hex("0b0d14");
-        static readonly Color32 ColUnknownEdge = Hex("0d1018");
-        static readonly Color32 ColRockDark = Hex("181c25");
+        static readonly Color32 ColUnknown = Hex("090b11");
+        static readonly Color32 ColUnknownEdge = Hex("0b0d14");
+        static readonly Color32 ColRockDark = Hex("161a22");
         static readonly Color32 ColLamp = Hex("ffd9a0");
         static readonly Color32 ColHero = Hex("fff6dc");
         static readonly Color32 ColHeroEdge = Hex("ffb757");
         static readonly Color32 ColEmber = Hex("ff5a1f");
         static readonly Color32 ColEmberCore = Hex("ffe2a8");
-        static readonly Vector2Int[] Dirs = { Vector2Int.left, Vector2Int.right, new Vector2Int(0, -1), new Vector2Int(0, 1) };
+        static readonly Color32 ColDoorClosed = Hex("2c4a3f");
+        static readonly Color32 ColDoorOpen = Hex("7cf5b0");
         static readonly Color32[] AgeRamp =
         {
             Hex("fff7de"), Hex("ffd166"), Hex("f4a259"), Hex("e76f51"), Hex("c0503f"), Hex("9a3f3a"),
@@ -107,27 +106,36 @@ namespace PointOfOrigin
         float[] diedAt;
         readonly List<Vector2Int> seeds = new List<Vector2Int>();
         HashSet<Vector2Int> answer = new HashSet<Vector2Int>();
-
-        // the wanderer: the cell it stands on, its drawn position, the walk it is on, and what its lantern has shown
-        Vector2Int hero;
-        Vector2 heroPos;
-        readonly List<Vector2Int> path = new List<Vector2Int>();
+        readonly List<Vector2Int> pickupsLeft = new List<Vector2Int>();
+        readonly List<SpriteRenderer> pickupSprites = new List<SpriteRenderer>();
+        int carried;
+        bool fetching;
+        readonly List<Ember> embers = new List<Ember>();
+        Vector2Int exitCell = new Vector2Int(-1, -1);
         bool[] seen;
         float[] seenAt;
         bool allSeen;
-        float keyTimer;
-        int stepParity;
-        readonly List<Vector2Int> pickupsLeft = new List<Vector2Int>();  // seeds still lying in the world
-        int carried;                                                       // seeds in hand
-        bool fetching;                                                     // this level's seeds must be found first
-        readonly List<Ember> embers = new List<Ember>();
+
+        // the wanderer: bottom-centre position and velocity in world units (one cell = one unit, y up)
+        Vector2 pPos;
+        Vector2 pVel;
+        bool grounded;
+        float coyote;
+        float jumpBuffer;
+        bool facingRight = true;
+        Vector2Int lastRevealCell = new Vector2Int(-1, -1);
         int lives = StartLives;
         float deathAt;
         string deathText = "";
 
-        WorldView view;
-        GameObject baseObj;
-        Bounds baseBounds;   // world bounds of the unscaled base mesh
+        Texture2D tex;
+        Color32[] px;
+        SpriteRenderer worldSr;
+        SpriteRenderer bgSr;
+        SpriteRenderer playerSr;
+        SpriteRenderer glowSr;
+        Sprite emberSprite;
+        Sprite seedSprite;
         Camera cam;
         Vector3 camBase;
         Sfx sfx;
@@ -150,7 +158,6 @@ namespace PointOfOrigin
         bool muted;
         float demoTimer;
         int demoStage;
-        Vector2Int hover = new Vector2Int(-1, -1);
         string fatal;
 
         readonly List<Button> buttons = new List<Button>();
@@ -158,8 +165,10 @@ namespace PointOfOrigin
         Texture2D panelTex;
         int styledHeight;
 
-        bool CanReveal => attempts >= RevealAfter && !revealed && (phase == Phase.Place || phase == Phase.Result);
+        bool CanReveal => attempts >= RevealAfter && !revealed && (phase == Phase.Play || phase == Phase.Result);
         bool Solved(int i) => (solvedMask & (1 << i)) != 0;
+        bool InWorld => phase == Phase.Play || phase == Phase.Growing || phase == Phase.Result;
+        Vector2 PlayerCentre => new Vector2(pPos.x, pPos.y + PlayerH / 2f);
 
         // ------------------------------------------------------------------ setup
 
@@ -179,35 +188,41 @@ namespace PointOfOrigin
             cam.orthographic = true;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = ColBg;
-            cam.nearClipPlane = 0.3f;
-            cam.farClipPlane = 300f;
-            cam.transform.rotation = Quaternion.Euler(CamPitch, CamYaw, 0f);
-            camBase = -cam.transform.forward * 80f;
+            cam.transform.rotation = Quaternion.identity;
+            camBase = new Vector3(0f, 0f, -10f);
             cam.transform.position = camBase;
             var extraData = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             if (extraData != null) extraData.renderPostProcessing = false;
 
-            var shader = Shader.Find("PointOfOrigin/VertexColor");
-            if (shader == null) Debug.LogError("Point of Origin: the PointOfOrigin/VertexColor shader is missing from Resources");
-            var world = new GameObject("World");
-            view = world.AddComponent<WorldView>();
-            view.Init(new Material(shader));
+            var shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default") ?? Shader.Find("Sprites/Default");
+            Material Unlit() => shader != null ? new Material(shader) : null;
 
-            // the stone slab under the world: modelled in Houdini, written out as a triangle list with baked vertex colours
-            var baseText = Resources.Load<TextAsset>("Models/DioramaBase");
-            if (baseText != null && shader != null)
-            {
-                var baseMesh = MeshText.Load(baseText, "diorama base");
-                if (baseMesh.vertexCount > 0)
-                {
-                    baseObj = new GameObject("Diorama Base");
-                    baseObj.AddComponent<MeshFilter>().sharedMesh = baseMesh;
-                    var mr = baseObj.AddComponent<MeshRenderer>();
-                    mr.sharedMaterial = new Material(shader);
-                    mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    baseBounds = baseMesh.bounds;
-                }
-            }
+            var back = new GameObject("Background");
+            bgSr = back.AddComponent<SpriteRenderer>();
+            bgSr.sortingOrder = -10;
+            bgSr.sprite = Sprite.Create(MakeVignette(128), new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f), 128f);
+            if (shader != null) bgSr.sharedMaterial = Unlit();
+
+            var world = new GameObject("World");
+            worldSr = world.AddComponent<SpriteRenderer>();
+            worldSr.sortingOrder = 0;
+            if (shader != null) worldSr.sharedMaterial = Unlit();
+
+            var glow = new GameObject("Lantern");
+            glowSr = glow.AddComponent<SpriteRenderer>();
+            glowSr.sortingOrder = 5;
+            glowSr.sprite = Sprite.Create(MakeGlow(64), new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 6f);
+            glowSr.color = new Color(1f, 0.85f, 0.6f, 0.28f);
+            if (shader != null) glowSr.sharedMaterial = Unlit();
+
+            var player = new GameObject("Wanderer");
+            playerSr = player.AddComponent<SpriteRenderer>();
+            playerSr.sortingOrder = 10;
+            playerSr.sprite = Sprite.Create(MakePlayerTexture(), new Rect(0, 0, 6, 8), new Vector2(0.5f, 0f), CellPx);
+            if (shader != null) playerSr.sharedMaterial = Unlit();
+
+            emberSprite = Sprite.Create(MakeDot(6, ColEmber, ColEmberCore), new Rect(0, 0, 6, 6), new Vector2(0.5f, 0.5f), CellPx);
+            seedSprite = Sprite.Create(MakeDot(5, ColSeed, ColSeedEdge), new Rect(0, 0, 5, 5), new Vector2(0.5f, 0.5f), CellPx);
 
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
@@ -235,6 +250,74 @@ namespace PointOfOrigin
             sim = null;
         }
 
+        static Texture2D MakeVignette(int size)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            float half = size / 2f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
+                    float d = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy) / 1.25f);
+                    float k = d * d * (3f - 2f * d);
+                    pixels[y * size + x] = Color32.Lerp(ColBgCentre, ColBgEdge, k);
+                }
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            return t;
+        }
+
+        static Texture2D MakeGlow(int size)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            float half = size / 2f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
+                    float d = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy));
+                    float a = (1f - d) * (1f - d);
+                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            return t;
+        }
+
+        static Texture2D MakePlayerTexture()
+        {
+            var t = new Texture2D(6, 8, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            var clear = new Color32(0, 0, 0, 0);
+            var pixels = new Color32[6 * 8];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = clear;
+            for (int y = 0; y < 5; y++) for (int x = 1; x < 5; x++) pixels[y * 6 + x] = ColHero;      // body
+            for (int y = 5; y < 8; y++) for (int x = 1; x < 5; x++) pixels[y * 6 + x] = ColHeroEdge;  // head
+            pixels[3 * 6 + 5] = ColLamp;                                                              // the lantern
+            pixels[2 * 6 + 5] = ColLamp;
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            return t;
+        }
+
+        static Texture2D MakeDot(int size, Color32 rim, Color32 core)
+        {
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            float half = size / 2f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x + 0.5f - half, dy = y + 0.5f - half;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy) / half;
+                    pixels[y * size + x] = d > 1f ? new Color32(0, 0, 0, 0) : d < 0.5f ? core : rim;
+                }
+            t.SetPixels32(pixels);
+            t.Apply(false);
+            return t;
+        }
+
         void LoadLevel(int index)
         {
             levelIndex = Mathf.Clamp(index, 0, set.levels.Length - 1);
@@ -254,19 +337,36 @@ namespace PointOfOrigin
             seen = new bool[n];
             seenAt = new float[n];
             allSeen = false;
-            path.Clear();
-            hero = StartCell();
-            heroPos = hero;
-            RevealAround(hero);
+            seeds.Clear();
+            answer = new HashSet<Vector2Int>(level.OriginCells());
             pickupsLeft.Clear();
             pickupsLeft.AddRange(level.PickupCells());
             fetching = pickupsLeft.Count > 0;
             carried = fetching ? 0 : level.seeds;
+            foreach (var e in embers) if (e.sr != null) Destroy(e.sr.gameObject);
             embers.Clear();
             foreach (var spec in level.EmberSpecs())
-                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right });
-            seeds.Clear();
-            answer = new HashSet<Vector2Int>(level.OriginCells());
+            {
+                var go = new GameObject("Ember");
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = emberSprite;
+                sr.sortingOrder = 8;
+                sr.sharedMaterial = playerSr.sharedMaterial;
+                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right, sr = sr });
+            }
+            foreach (var s in pickupSprites) if (s != null) Destroy(s.gameObject);
+            pickupSprites.Clear();
+            foreach (var k in pickupsLeft)
+            {
+                var go = new GameObject("Seed");
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = seedSprite;
+                sr.sortingOrder = 7;
+                sr.sharedMaterial = playerSr.sharedMaterial;
+                pickupSprites.Add(sr);
+            }
+            var ex = level.ExitCell();
+            exitCell = ex ?? new Vector2Int(-1, -1);
             attempts = 0;
             revealed = false;
             won = false;
@@ -276,46 +376,36 @@ namespace PointOfOrigin
             stepTimer = 0f;
             winAt = -10f;
 
-            TrackChanges();
-            FitBase();
-            FitCamera();
-            BuildWorld();
-        }
+            var start = level.StartCell() ?? new Vector2Int(level.w / 2, level.h / 2);
+            pPos = new Vector2(start.x + 0.5f, WorldY(start.y));
+            pVel = Vector2.zero;
+            grounded = false;
+            coyote = 0f;
+            jumpBuffer = 0f;
+            lastRevealCell = new Vector2Int(-1, -1);
+            RevealAround(start);
 
-        /// <summary>Stretch the slab to the level's footprint and tuck its top just under the tiles.</summary>
-        void FitBase()
-        {
-            if (baseObj == null || baseBounds.size.x < 0.01f || baseBounds.size.z < 0.01f) return;
-            float sx = (level.w + 2.4f) / baseBounds.size.x;
-            float sz = (level.h + 2.4f) / baseBounds.size.z;
-            baseObj.transform.localScale = new Vector3(sx, 1f, sz);
-            baseObj.transform.position = new Vector3(-baseBounds.center.x * sx, (TileBottom - 0.03f) - baseBounds.max.y, -baseBounds.center.z * sz);
-        }
-
-        /// <summary>World position of a cell's centre at the floor plane: row 0 is the far edge.</summary>
-        Vector3 CellCentre(float x, float y) =>
-            new Vector3(x - level.w / 2f + 0.5f, 0f, (level.h - 1 - y) - level.h / 2f + 0.5f);
-
-        void FitCamera()
-        {
-            if (level == null || cam == null) return;
-            // Fit the grid's footprint box on screen, leaving the HUD bands clear; the title shows it smaller.
-            float aspect = Mathf.Max(0.1f, cam.aspect);
-            var m = cam.worldToCameraMatrix;
-            float hw = level.w / 2f + 0.4f, hh = level.h / 2f + 0.4f;
-            float ex = 0f, ey = 0f;
-            for (int i = 0; i < 8; i++)
+            int tw = level.w * CellPx, th = level.h * CellPx;
+            if (tex == null || tex.width != tw || tex.height != th)
             {
-                float low = baseObj != null ? TileBottom - baseBounds.size.y - 0.03f : TileBottom;
-                var p = new Vector3((i & 1) == 0 ? -hw : hw, (i & 2) == 0 ? low : RockTop + 0.4f, (i & 4) == 0 ? -hh : hh);
-                var v = m.MultiplyPoint(p);
-                ex = Mathf.Max(ex, Mathf.Abs(v.x));
-                ey = Mathf.Max(ey, Mathf.Abs(v.y));
+                if (worldSr.sprite != null) Destroy(worldSr.sprite);
+                if (tex != null) Destroy(tex);
+                tex = new Texture2D(tw, th, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                px = new Color32[tw * th];
+                worldSr.sprite = Sprite.Create(tex, new Rect(0, 0, tw, th), Vector2.zero, CellPx);
             }
-            float size = Mathf.Max(ey / 0.74f, ex / aspect / 0.84f);
-            if (phase == Phase.Title) size *= 1.4f;
-            cam.orthographicSize = size;
+            TrackChanges();
+            SnapCamera();
+            Paint();
         }
+
+        /// <summary>World y of the bottom edge of a grid row: row 0 is the top of the map.</summary>
+        float WorldY(int gy) => level.h - 1 - gy;
+        int GridY(float wy) => level.h - 1 - Mathf.FloorToInt(wy);
+        Vector2Int CellOf(Vector2 world) => new Vector2Int(Mathf.FloorToInt(world.x), GridY(world.y));
+        Vector2 CellCentreWorld(Vector2Int c) => new Vector2(c.x + 0.5f, WorldY(c.y) + 0.5f);
+        bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < level.w && c.y < level.h;
+        bool Open(Vector2Int c) => InBounds(c) && rock[c.y * level.w + c.x] != Sim.Rock;
 
         int FirstUnsolved()
         {
@@ -327,8 +417,7 @@ namespace PointOfOrigin
         int DemoLevel()
         {
             int best = 0;
-            for (int i = 0; i < set.levels.Length; i++)
-                if (Solved(i)) best = i;
+            for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) best = i;
             return best;
         }
 
@@ -345,23 +434,10 @@ namespace PointOfOrigin
         void Update()
         {
             if (fatal != null || sim == null) return;
-            FitCamera();
-
-            if (shake > 0f)
-            {
-                shake -= Time.deltaTime;
-                var o = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, shake) * 0.6f;
-                cam.transform.position = camBase + cam.transform.right * o.x + cam.transform.up * o.y;
-            }
-            else
-            {
-                cam.transform.position = camBase;
-            }
+            float dt = Mathf.Min(Time.deltaTime, MaxDt);
 
             var mouse = InputBridge.MousePosition;
             var gui = new Vector2(mouse.x, Screen.height - mouse.y);
-            bool inWorld = phase == Phase.Place || phase == Phase.Growing || phase == Phase.Result;
-            hover = inWorld ? CellAt(mouse) : new Vector2Int(-1, -1);
             Layout();
 
             if (InputBridge.Clicked)
@@ -376,38 +452,26 @@ namespace PointOfOrigin
                 }
                 if (!hit)
                 {
-                    var c = hover;
                     switch (phase)
                     {
                         case Phase.Title: StartLevel(FirstUnsolved()); break;
-                        case Phase.Story: phase = Phase.Place; break;
+                        case Phase.Story: phase = Phase.Play; break;
                         case Phase.GameOver: Retry(); break;
                         case Phase.Finished: EnterTitle(); break;
-                        case Phase.Place:
-                            if (c.x >= 0) { if (c == hero && path.Count == 0) ToggleSeed(hero); else WalkTo(c); }
-                            break;
-                        case Phase.Growing:
-                            if (c.x >= 0) WalkTo(c);
-                            break;
-                        case Phase.Result:
-                            if (c.x >= 0) WalkTo(c);
-                            else if (won) Next();
-                            else Rewind();
-                            break;
+                        case Phase.Result: if (!won) Rewind(); break;
                     }
                 }
             }
-            if (InputBridge.RightClicked && phase == Phase.Place && hover.x >= 0 && seeds.Contains(hover))
-                ToggleSeed(hover);
 
-            if (InputBridge.Pressed(Key.Space, KeyCode.Space))
+            if (InputBridge.Pressed(Key.Space, KeyCode.Space) || InputBridge.Pressed(Key.W, KeyCode.W) || InputBridge.Pressed(Key.UpArrow, KeyCode.UpArrow))
             {
-                if (phase == Phase.Place) { if (path.Count == 0) ToggleSeed(hero); }
+                if (InWorld) jumpBuffer = JumpBufferTime;
                 else Primary();
             }
+            if (InputBridge.Pressed(Key.E, KeyCode.E) && phase == Phase.Play) PlantHere();
             if (InputBridge.Pressed(Key.Enter, KeyCode.Return) || InputBridge.Pressed(Key.G, KeyCode.G)) Primary();
-            if (InputBridge.Pressed(Key.R, KeyCode.R) && (phase == Phase.Place || phase == Phase.Growing || phase == Phase.Result)) Rewind();
-            if (InputBridge.Pressed(Key.N, KeyCode.N) && (phase == Phase.Place || phase == Phase.Result)) Skip();
+            if (InputBridge.Pressed(Key.R, KeyCode.R) && InWorld) Rewind();
+            if (InputBridge.Pressed(Key.N, KeyCode.N) && (phase == Phase.Play || phase == Phase.Result)) Skip();
             if (InputBridge.Pressed(Key.V, KeyCode.V) && CanReveal) Reveal();
             if (InputBridge.Pressed(Key.M, KeyCode.M)) ToggleMute();
             if (InputBridge.Pressed(Key.Escape, KeyCode.Escape))
@@ -416,28 +480,21 @@ namespace PointOfOrigin
                 else EnterTitle();
             }
 
-            if (inWorld)
+            if (InWorld)
             {
-                var dir = Vector2Int.zero;
-                if (InputBridge.Held(Key.A, KeyCode.A) || InputBridge.Held(Key.LeftArrow, KeyCode.LeftArrow)) dir = Vector2Int.left;
-                else if (InputBridge.Held(Key.D, KeyCode.D) || InputBridge.Held(Key.RightArrow, KeyCode.RightArrow)) dir = Vector2Int.right;
-                else if (InputBridge.Held(Key.W, KeyCode.W) || InputBridge.Held(Key.UpArrow, KeyCode.UpArrow)) dir = new Vector2Int(0, -1);
-                else if (InputBridge.Held(Key.S, KeyCode.S) || InputBridge.Held(Key.DownArrow, KeyCode.DownArrow)) dir = new Vector2Int(0, 1);
-                if (dir != Vector2Int.zero)
+                float move = 0f;
+                if (InputBridge.Held(Key.A, KeyCode.A) || InputBridge.Held(Key.LeftArrow, KeyCode.LeftArrow)) move -= 1f;
+                if (InputBridge.Held(Key.D, KeyCode.D) || InputBridge.Held(Key.RightArrow, KeyCode.RightArrow)) move += 1f;
+                bool jumpHeld = InputBridge.Held(Key.Space, KeyCode.Space) || InputBridge.Held(Key.W, KeyCode.W) || InputBridge.Held(Key.UpArrow, KeyCode.UpArrow);
+                StepPlayer(dt, move, jumpHeld);
+                if (InWorld)
                 {
-                    keyTimer -= Time.deltaTime;
-                    if (keyTimer <= 0f)
-                    {
-                        keyTimer = KeyRepeat;
-                        TryStep(dir);
-                    }
+                    var cell = CellOf(PlayerCentre);
+                    if (cell != lastRevealCell) { lastRevealCell = cell; RevealAround(cell); }
+                    if (pickupsLeft.Remove(cell)) { carried++; sfx.Success(); }
+                    if (won && cell == exitCell) { Next(); return; }
+                    UpdateEmbers(dt);
                 }
-                else
-                {
-                    keyTimer = 0f;
-                }
-                MoveHero();
-                UpdateEmbers(Time.deltaTime);
             }
 
             if (phase == Phase.Dead && Time.time - deathAt > DeathSeconds)
@@ -460,38 +517,90 @@ namespace PointOfOrigin
                 Demo();
             }
             if (phase == Phase.Result) resultTime += Time.deltaTime;
-            BuildWorld();
+
+            FollowCamera(dt);
+            Paint();
+            PlaceSprites();
         }
 
-        /// <summary>The cell under a screen point: the mouse ray meets the plane of the tile tops.</summary>
-        Vector2Int CellAt(Vector2 screen)
+        // ------------------------------------------------------------------ platforming
+
+        bool SolidAtWorld(int gx, int wy)
         {
-            var ray = cam.ScreenPointToRay(new Vector3(screen.x, screen.y, 0f));
-            var plane = new Plane(Vector3.up, new Vector3(0f, FloorTop + 0.1f, 0f));
-            if (!plane.Raycast(ray, out float dist)) return new Vector2Int(-1, -1);
-            var wp = ray.GetPoint(dist);
-            int x = Mathf.FloorToInt(wp.x + level.w / 2f);
-            int row = Mathf.FloorToInt(wp.z + level.h / 2f);
-            int y = level.h - 1 - row;
-            if (x < 0 || y < 0 || x >= level.w || y >= level.h) return new Vector2Int(-1, -1);
-            return new Vector2Int(x, y);
+            if (gx < 0 || gx >= level.w) return true;     // the world has walls at its sides
+            if (wy < 0 || wy >= level.h) return false;
+            int gy = level.h - 1 - wy;
+            int i = gy * level.w + gx;
+            if (rock[i] == Sim.Rock) return true;
+            return sim.Generation > 0 && sim.Cells[i] == Sim.Alive;
         }
 
-        // ------------------------------------------------------------------ the wanderer
-
-        bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < level.w && c.y < level.h;
-        bool Open(Vector2Int c) => InBounds(c) && rock[c.y * level.w + c.x] != Sim.Rock;
-
-        /// <summary>Where the wanderer may step: open ground that living growth has not taken (your own seeds at generation 0 are fine).</summary>
-        bool Passable(Vector2Int c)
+        bool Overlaps(float x, float y, float w, float h)
         {
-            if (!Open(c)) return false;
-            return sim.Generation == 0 || sim.Cells[c.y * level.w + c.x] != Sim.Alive;
+            int gx0 = Mathf.FloorToInt(x), gx1 = Mathf.FloorToInt(x + w - 1e-4f);
+            int wy0 = Mathf.FloorToInt(y), wy1 = Mathf.FloorToInt(y + h - 1e-4f);
+            for (int gx = gx0; gx <= gx1; gx++)
+                for (int wy = wy0; wy <= wy1; wy++)
+                    if (SolidAtWorld(gx, wy)) return true;
+            return false;
         }
 
-        /// <summary>Embers drift along their row or column, turning at rock or the edge; touching one is the end.</summary>
+        void MoveAxis(float dx, float dy)
+        {
+            pPos.x += dx;
+            pPos.y += dy;
+            float x = pPos.x - PlayerW / 2f, y = pPos.y;
+            if (!Overlaps(x, y, PlayerW, PlayerH)) return;
+            if (dx != 0f)
+            {
+                if (dx > 0f) { int gx = Mathf.FloorToInt(x + PlayerW - 1e-4f); pPos.x = gx - PlayerW / 2f - 1e-3f; }
+                else { int gx = Mathf.FloorToInt(x); pPos.x = gx + 1 + PlayerW / 2f + 1e-3f; }
+                pVel.x = 0f;
+            }
+            else if (dy != 0f)
+            {
+                if (dy < 0f) { int wy = Mathf.FloorToInt(y); pPos.y = wy + 1 + 1e-3f; grounded = true; }
+                else { int wy = Mathf.FloorToInt(y + PlayerH - 1e-4f); pPos.y = wy - PlayerH - 1e-3f; }
+                pVel.y = 0f;
+            }
+        }
+
+        void StepPlayer(float dt, float move, bool jumpHeld)
+        {
+            if (move > 0f) facingRight = true;
+            else if (move < 0f) facingRight = false;
+            pVel.x = Mathf.MoveTowards(pVel.x, move * RunSpeed, 70f * dt);
+            if (grounded) coyote = CoyoteTime; else coyote -= dt;
+            jumpBuffer -= dt;
+            if (jumpBuffer > 0f && coyote > 0f)
+            {
+                pVel.y = JumpVelocity;
+                jumpBuffer = 0f;
+                coyote = 0f;
+                grounded = false;
+                sfx.Jump();
+            }
+            if (!jumpHeld && pVel.y > 4f) pVel.y = 4f;   // let go early for a shorter hop
+            pVel.y = Mathf.Max(pVel.y - Gravity * dt, -26f);
+
+            MoveAxis(pVel.x * dt, 0f);
+            bool wasGrounded = grounded;
+            grounded = false;
+            MoveAxis(0f, pVel.y * dt);
+            if (!grounded) grounded = pVel.y <= 0f && Overlaps(pPos.x - PlayerW / 2f + 0.03f, pPos.y - 0.05f, PlayerW - 0.06f, 0.05f);
+            if (grounded && !wasGrounded && pVel.y <= 0f) sfx.Step(1);
+
+            if (pPos.y < -2f) Die("THE VOID TOOK YOU");
+        }
+
+        bool PlayerInsideGrowth()
+        {
+            return Overlaps(pPos.x - PlayerW / 2f + 0.1f, pPos.y + 0.08f, PlayerW - 0.2f, PlayerH - 0.16f);
+        }
+
         void UpdateEmbers(float dt)
         {
+            var centre = PlayerCentre;
             foreach (var e in embers)
             {
                 var next = e.cell + e.dir;
@@ -502,34 +611,14 @@ namespace PointOfOrigin
                     if (!Open(next)) continue;
                 }
                 e.pos = Vector2.MoveTowards(e.pos, next, EmberSpeed * dt);
-                if ((e.pos - (Vector2)next).sqrMagnitude < 1e-5f)
-                {
-                    e.pos = next;
-                    e.cell = next;
-                }
-                if (Vector2.Distance(e.pos, heroPos) < 0.6f)
+                if ((e.pos - (Vector2)next).sqrMagnitude < 1e-5f) { e.pos = next; e.cell = next; }
+                var world = new Vector2(e.pos.x + 0.5f, level.h - 1 - e.pos.y + 0.5f);
+                if (Vector2.Distance(world, centre) < 0.72f)
                 {
                     Die("THE EMBER TOOK YOU");
                     return;
                 }
             }
-        }
-
-        /// <summary>The level's start cell, or the open cell nearest the centre.</summary>
-        Vector2Int StartCell()
-        {
-            var s = level.StartCell();
-            if (s.HasValue && Open(s.Value)) return s.Value;
-            var centre = new Vector2Int(level.w / 2, level.h / 2);
-            for (int r = 0; r < Mathf.Max(level.w, level.h); r++)
-                for (int dy = -r; dy <= r; dy++)
-                    for (int dx = -r; dx <= r; dx++)
-                    {
-                        if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r) continue;
-                        var c = centre + new Vector2Int(dx, dy);
-                        if (Open(c)) return c;
-                    }
-            return centre;
         }
 
         void RevealAround(Vector2Int c)
@@ -549,92 +638,54 @@ namespace PointOfOrigin
                 }
         }
 
-        /// <summary>Shortest four-way walk between two cells around rock, excluding the start. Empty when unreachable.</summary>
-        List<Vector2Int> FindPath(Vector2Int from, Vector2Int to)
+        // ------------------------------------------------------------------ camera
+
+        float ViewHalfH => Mathf.Min(level.h / 2f, 8.5f);
+
+        Vector3 CameraGoal()
         {
-            var result = new List<Vector2Int>();
-            if (!Passable(to) || from == to) return result;
-            int w = level.w, n = w * level.h;
-            var prev = new int[n];
-            for (int i = 0; i < n; i++) prev[i] = -1;
-            int fromIndex = from.y * w + from.x;
-            prev[fromIndex] = fromIndex;
-            var queue = new Queue<Vector2Int>();
-            queue.Enqueue(from);
-            while (queue.Count > 0)
-            {
-                var c = queue.Dequeue();
-                if (c == to) break;
-                foreach (var d in Dirs)
-                {
-                    var m = c + d;
-                    if (!Passable(m)) continue;
-                    int mi = m.y * w + m.x;
-                    if (prev[mi] >= 0) continue;
-                    prev[mi] = c.y * w + c.x;
-                    queue.Enqueue(m);
-                }
-            }
-            int ti = to.y * w + to.x;
-            if (prev[ti] < 0) return result;
-            for (int i = ti; i != fromIndex; i = prev[i]) result.Add(new Vector2Int(i % w, i / w));
-            result.Reverse();
-            return result;
+            float halfH = ViewHalfH;
+            float halfW = halfH * Mathf.Max(0.1f, cam.aspect);
+            Vector2 focus = phase == Phase.Title ? DemoFocus() : new Vector2(pPos.x, pPos.y + 1.5f);
+            float x = level.w <= halfW * 2f ? level.w / 2f : Mathf.Clamp(focus.x, halfW, level.w - halfW);
+            float y = level.h <= halfH * 2f ? level.h / 2f : Mathf.Clamp(focus.y, halfH, level.h - halfH);
+            return new Vector3(x, y, -10f);
         }
 
-        /// <summary>Walk to a cell. Mid-step, the walk continues from the cell being entered so the figure never snaps back.</summary>
-        void WalkTo(Vector2Int c)
+        Vector2 DemoFocus()
         {
-            var from = path.Count > 0 ? path[0] : hero;
-            if (c == from) return;
-            var p = FindPath(from, c);
-            if (p.Count == 0)
-            {
-                sfx.Blocked();
-                return;
-            }
-            var first = path.Count > 0 ? path[0] : (Vector2Int?)null;
-            path.Clear();
-            if (first.HasValue) path.Add(first.Value);
-            path.AddRange(p);
+            if (answer.Count == 0) return new Vector2(level.w / 2f, level.h / 2f);
+            var sum = Vector2.zero;
+            foreach (var a in answer) sum += CellCentreWorld(a);
+            return sum / answer.Count;
         }
 
-        void TryStep(Vector2Int dir)
+        void SnapCamera()
         {
-            if (path.Count > 0) return;
-            var n = hero + dir;
-            if (Passable(n)) path.Add(n);
+            cam.orthographicSize = ViewHalfH;
+            camBase = CameraGoal();
+            cam.transform.position = camBase;
         }
 
-        void MoveHero()
+        void FollowCamera(float dt)
         {
-            if (path.Count == 0) return;
-            var next = path[0];
-            if (!Passable(next))
+            cam.orthographicSize = ViewHalfH;
+            camBase = Vector3.Lerp(camBase, CameraGoal(), 1f - Mathf.Exp(-7f * dt));
+            var pos = camBase;
+            if (shake > 0f)
             {
-                // the growth has taken the ground ahead: stop where you are
-                path.Clear();
-                return;
+                shake -= dt;
+                var o = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, shake) * 0.5f;
+                pos += new Vector3(o.x, o.y, 0f);
             }
-            Vector2 goal = next;
-            heroPos = Vector2.MoveTowards(heroPos, goal, WalkSpeed * Time.deltaTime);
-            if ((heroPos - goal).sqrMagnitude < 1e-5f)
-            {
-                heroPos = goal;
-                hero = next;
-                path.RemoveAt(0);
-                RevealAround(hero);
-                stepParity ^= 1;
-                sfx.Step(stepParity);
-                if (pickupsLeft.Remove(hero))
-                {
-                    carried++;
-                    sfx.Success();
-                }
-            }
+            cam.transform.position = pos;
+            bgSr.transform.position = new Vector3(camBase.x, camBase.y, 5f);
+            float aspect = Mathf.Max(0.1f, cam.aspect);
+            bgSr.transform.localScale = new Vector3(2f * cam.orthographicSize * aspect * 1.04f, 2f * cam.orthographicSize * 1.04f, 1f);
         }
 
-        /// <summary>The title screen replays the last solved level's origins growing, over and over.</summary>
+        // ------------------------------------------------------------------ title demo
+
         void Demo()
         {
             demoTimer += Time.deltaTime;
@@ -653,12 +704,7 @@ namespace PointOfOrigin
                     }
                     break;
                 default:
-                    if (demoTimer > 2.2f)
-                    {
-                        demoTimer = 0f;
-                        DemoReset();
-                        demoStage = 0;
-                    }
+                    if (demoTimer > 2.2f) { demoTimer = 0f; DemoReset(); demoStage = 0; }
                     break;
             }
         }
@@ -677,11 +723,11 @@ namespace PointOfOrigin
             switch (phase)
             {
                 case Phase.Title: StartLevel(FirstUnsolved()); break;
-                case Phase.Story: phase = Phase.Place; break;
+                case Phase.Story: phase = Phase.Play; break;
                 case Phase.GameOver: Retry(); break;
-                case Phase.Place: Grow(); break;
+                case Phase.Play: Grow(); break;
                 case Phase.Growing: while (phase == Phase.Growing) Advance(); break;
-                case Phase.Result: if (won) Next(); else Rewind(); break;
+                case Phase.Result: if (!won) Rewind(); break;
                 case Phase.Finished: EnterTitle(); break;
             }
         }
@@ -694,6 +740,7 @@ namespace PointOfOrigin
             demoStage = 0;
             demoTimer = 0f;
             DemoReset();
+            SnapCamera();
         }
 
         void StartLevel(int index)
@@ -704,7 +751,11 @@ namespace PointOfOrigin
             sfx.Select();
         }
 
-        /// <summary>A lantern goes out. After the fall the chapter restarts, or the dark takes you.</summary>
+        void BeginLevel()
+        {
+            phase = string.IsNullOrEmpty(level.intro) ? Phase.Play : Phase.Story;
+        }
+
         void Die(string why)
         {
             if (phase == Phase.Dead || phase == Phase.GameOver) return;
@@ -712,12 +763,11 @@ namespace PointOfOrigin
             deathAt = Time.time;
             deathText = why;
             lives = Mathf.Max(0, lives - 1);
-            path.Clear();
+            pVel = Vector2.zero;
             shake = 0.45f;
             sfx.Fail();
         }
 
-        /// <summary>Restart the chapter, keeping what the lantern has already shown.</summary>
         void RestartLevel()
         {
             var keepSeen = seen;
@@ -725,7 +775,7 @@ namespace PointOfOrigin
             LoadLevel(levelIndex);
             for (int i = 0; i < seen.Length && i < keepSeen.Length; i++)
                 if (keepSeen[i]) { seen[i] = true; seenAt[i] = keepSeenAt[i]; }
-            phase = Phase.Place;
+            phase = Phase.Play;
         }
 
         void Retry()
@@ -735,10 +785,12 @@ namespace PointOfOrigin
             sfx.Select();
         }
 
-        /// <summary>A level opens on its chapter card when it has one, otherwise straight into play.</summary>
-        void BeginLevel()
+        /// <summary>Plant or take back a seed in the cell the wanderer stands in.</summary>
+        void PlantHere()
         {
-            phase = string.IsNullOrEmpty(level.intro) ? Phase.Place : Phase.Story;
+            var c = CellOf(PlayerCentre);
+            if (!InBounds(c)) return;
+            ToggleSeed(c);
         }
 
         void ToggleSeed(Vector2Int c)
@@ -774,7 +826,7 @@ namespace PointOfOrigin
 
         void Grow()
         {
-            if (seeds.Count == 0) return;
+            if (seeds.Count == 0) { sfx.Blocked(); return; }
             attempts++;
             stepTimer = 0f;
             phase = Phase.Growing;
@@ -786,7 +838,7 @@ namespace PointOfOrigin
             sfx.Tick(gen);
             TrackChanges();
             match = sim.Compare(target);
-            if (sim.Cells[hero.y * level.w + hero.x] == Sim.Alive)
+            if (PlayerInsideGrowth())
             {
                 Die("OVERGROWN");
                 return;
@@ -817,10 +869,10 @@ namespace PointOfOrigin
                 unlocked = Mathf.Max(unlocked, Mathf.Min(levelIndex + 1, set.levels.Length - 1));
                 SavePrefs();
                 sfx.Success();
+                if (exitCell.x < 0) Next();
             }
             else
             {
-                shake = 0.3f;
                 sfx.Fail();
             }
         }
@@ -832,7 +884,8 @@ namespace PointOfOrigin
             foreach (var s in seeds) sim.Set(s.x, s.y, Sim.Alive);
             TrackChanges();
             stepTimer = 0f;
-            phase = Phase.Place;
+            won = false;
+            phase = Phase.Play;
             if (hadGrown) sfx.Rewind();
         }
 
@@ -872,7 +925,6 @@ namespace PointOfOrigin
 
         // ------------------------------------------------------------------ painting
 
-        /// <summary>Remember when each cell was born or died so Paint can animate it.</summary>
         void TrackChanges()
         {
             sim.Refresh();
@@ -887,34 +939,21 @@ namespace PointOfOrigin
         }
 
         static Color32 AgeColor(int age) => AgeRamp[Mathf.Clamp(age - 1, 0, AgeRamp.Length - 1)];
-
         static Color32 Lighten(Color32 c, float t) => Color32.Lerp(c, new Color32(255, 255, 255, 255), t);
 
-        static float EaseOut(float t)
+        void Paint()
         {
-            t = Mathf.Clamp01(t);
-            return 1f - (1f - t) * (1f - t);
-        }
-
-        /// <summary>
-        /// Rebuild the diorama: every visible cell is a slab whose colour and
-        /// height say what it is, revealed ground rises out of the void, living
-        /// cells stand taller with age, and the wanderer stands on its cell.
-        /// </summary>
-        void BuildWorld()
-        {
-            if (sim == null || view == null) return;
+            if (sim == null || tex == null) return;
             sim.Refresh();
-            view.Begin();
+            var clear = new Color32(0, 0, 0, 0);
+            for (int i = 0; i < px.Length; i++) px[i] = clear;
 
             float now = Time.time;
-            bool placing = phase == Phase.Place || (phase == Phase.Title && sim.Generation == 0);
-            bool lamp = phase != Phase.Title && phase != Phase.Finished;
+            bool placing = phase == Phase.Play || (phase == Phase.Title && sim.Generation == 0);
             float pulse = 0.5f + 0.5f * Mathf.Sin(now * 2.4f);
             Color32 ghost = Color32.Lerp(ColGhost, ColGhostBright, pulse * 0.6f);
+            var ghostFill = new Color32(18, 34, 40, 110);
             float flash = 1f - Mathf.Clamp01((now - winAt) / 0.5f);
-            float reach = LanternRadius + 1.3f;
-            float half = TileSize / 2f;
 
             for (int y = 0; y < level.h; y++)
             {
@@ -926,120 +965,115 @@ namespace PointOfOrigin
                     bool isRock = rock[i] == Sim.Rock;
                     bool alive = c == Sim.Alive;
                     bool visible = allSeen || seen[i] || alive;
-                    var cell = CellCentre(x, y);
+                    // air is empty sky; the unexplored dark is solid black; rock and the ghost frames are drawn
                     if (!visible)
                     {
-                        // unseen ground: a sunken, dark slab, so the world's footprint is always there to explore
-                        float sunkTop = TileBottom + (isRock ? 0.32f : 0.12f);
-                        view.Box(cell.x - half, TileBottom, cell.z - half, cell.x + half, sunkTop, cell.z + half, isRock ? ColRockDark : ColUnknown);
+                        PaintCell(x, y, isRock ? ColRockDark : ColUnknown, isRock ? ColRockDark : ColUnknown, 0);
                         continue;
                     }
-                    float rise = seen[i] ? EaseOut((now - seenAt[i]) / RiseSeconds) : 1f;
-                    bool hot = !isRock && hover.x == x && hover.y == y;
-                    float light = 0f;
-                    if (lamp)
-                    {
-                        float dist = Vector2.Distance(new Vector2(x, y), heroPos);
-                        light = Mathf.Clamp01(1f - dist / reach);
-                        light *= light;
-                    }
-
-                    Color32 top;
-                    float height;
                     if (isRock)
                     {
-                        top = ColRock;
-                        height = RockTop;
+                        PaintCell(x, y, ColRock, ColRockEdge, 0);
+                        continue;
                     }
-                    else if (alive)
-                    {
-                        if (placing) top = ColSeed;
-                        else if (inTarget) top = AgeColor(sim.Ages[i]);
-                        else top = ColWrong;
-                        if (flash > 0f && inTarget && !placing) top = Lighten(top, flash * 0.85f);
-                        float grown = EaseOut((now - bornAt[i]) / PopSeconds);
-                        float full = AliveTop + Mathf.Min(sim.Ages[i], 5) * 0.04f;
-                        height = Mathf.Lerp(FloorTop, full, grown);
-                    }
-                    else
-                    {
-                        top = ColOpen;
-                        height = FloorTop;
-                        float since = now - diedAt[i];
-                        if (since < AfterglowSeconds)
-                        {
-                            float d = since / AfterglowSeconds;
-                            top = Color32.Lerp(ColAfter, ColOpen, d);
-                            height = Mathf.Lerp(AliveTop, FloorTop, EaseOut(d));
-                        }
-                    }
-                    if (light > 0f) top = Color32.Lerp(top, ColLamp, light * (alive ? 0.12f : 0.28f));
-                    if (hot) top = Lighten(top, 0.18f);
-                    top = Color32.Lerp(ColUnknown, top, rise);
+                    if (inTarget && !alive) PaintCell(x, y, ghostFill, ghost, 0);
 
-                    var p = cell;
-                    float yTop = Mathf.Lerp(TileBottom + 0.12f, height, rise);
-                    view.Box(p.x - half, TileBottom, p.z - half, p.x + half, yTop, p.z + half, top);
-
-                    if (inTarget && !alive && !isRock && rise >= 1f)
+                    if (alive)
                     {
-                        Color32 frame = light > 0f ? Color32.Lerp(ghost, ColLamp, light * 0.3f) : ghost;
-                        view.Rim(p.x - half, p.z - half, p.x + half, p.z + half, yTop + 0.012f, 0.09f, frame);
+                        Color32 fill, edge;
+                        if (placing) { fill = ColSeed; edge = ColSeedEdge; }
+                        else if (inTarget) { fill = AgeColor(sim.Ages[i]); edge = Lighten(fill, 0.35f); }
+                        else { fill = ColWrong; edge = ColWrongEdge; }
+                        if (flash > 0f && inTarget && !placing) fill = Lighten(fill, flash * 0.85f);
+                        float a = (now - bornAt[i]) / PopSeconds;
+                        int inset = a >= 1f ? 0 : Mathf.Clamp((int)Mathf.Lerp(3.99f, 0f, Mathf.Clamp01(a)), 0, 3);
+                        PaintCell(x, y, fill, inset == 0 ? edge : fill, inset);
                     }
-                    if (revealed && answer.Contains(new Vector2Int(x, y)))
-                        view.Box(p.x - 0.14f, yTop, p.z - 0.14f, p.x + 0.14f, yTop + 0.16f, p.z + 0.14f, ColReveal);
+                    else if (visible && now - diedAt[i] < AfterglowSeconds)
+                    {
+                        float d = (now - diedAt[i]) / AfterglowSeconds;
+                        int inset = Mathf.Clamp((int)Mathf.Lerp(0f, 3.99f, d), 0, 3);
+                        PaintCell(x, y, ColAfter, ColAfter, inset);
+                    }
+                    if (exitCell.x == x && exitCell.y == y)
+                    {
+                        var door = won ? Lighten(ColDoorOpen, pulse * 0.3f) : ColDoorClosed;
+                        PaintCell(x, y, won ? ColDoorOpen : ColOpen, door, 0);
+                        PaintDot(x, y, door);
+                    }
+                    if (revealed && answer.Contains(new Vector2Int(x, y))) PaintDot(x, y, ColReveal);
                 }
             }
-            // embers: hot drifting remnants, visible even in the dark
+            tex.SetPixels32(px);
+            tex.Apply(false);
+        }
+
+        void PaintCell(int x, int y, Color32 fill, Color32 edge, int inset)
+        {
+            int tw = tex.width;
+            int x0 = x * CellPx;
+            int y0 = (level.h - 1 - y) * CellPx;
+            int inner = CellPx - 1;
+            int lo = inset, hi = inner - inset;
+            for (int dy = lo; dy < hi; dy++)
+            {
+                int row = (y0 + dy) * tw + x0;
+                for (int dx = lo; dx < hi; dx++)
+                {
+                    bool border = dx == lo || dy == lo || dx == hi - 1 || dy == hi - 1;
+                    px[row + dx] = border ? edge : fill;
+                }
+            }
+        }
+
+        void PaintDot(int x, int y, Color32 color)
+        {
+            int tw = tex.width;
+            int x0 = x * CellPx + 2;
+            int y0 = (level.h - 1 - y) * CellPx + 2;
+            for (int dy = 0; dy < 3; dy++)
+                for (int dx = 0; dx < 3; dx++)
+                    px[(y0 + dy) * tw + x0 + dx] = color;
+        }
+
+        void PlaceSprites()
+        {
+            bool showHero = phase != Phase.Title && phase != Phase.Finished;
+            playerSr.enabled = showHero;
+            glowSr.enabled = showHero;
+            if (showHero)
+            {
+                float now = Time.time;
+                float sink = phase == Phase.Dead || phase == Phase.GameOver ? Mathf.Clamp01((now - deathAt) / 0.9f) : 0f;
+                playerSr.transform.position = new Vector3(pPos.x, pPos.y - sink * 0.8f, -1f);
+                playerSr.transform.localScale = new Vector3(1f, 1f - sink * 0.6f, 1f);
+                playerSr.flipX = !facingRight;
+                playerSr.color = Color.Lerp(Color.white, new Color(0.35f, 0.25f, 0.25f, 1f), sink);
+                var centre = PlayerCentre;
+                glowSr.transform.position = new Vector3(centre.x, centre.y, -0.5f);
+                float breathe = 1f + 0.04f * Mathf.Sin(now * 3f);
+                glowSr.transform.localScale = new Vector3(breathe, breathe, 1f) * (1f - sink);
+            }
             foreach (var e in embers)
             {
-                var p = CellCentre(e.pos.x, e.pos.y);
-                float under = StandingHeight(e.cell);
-                float y0 = under + 0.14f + 0.04f * Mathf.Sin(now * 6f + e.cell.x);
-                float g = 0.5f + 0.5f * Mathf.Sin(now * 9f + e.cell.y);
-                var col = Color32.Lerp(ColEmber, ColEmberCore, g * 0.45f);
-                view.Box(p.x - 0.16f, y0, p.z - 0.16f, p.x + 0.16f, y0 + 0.30f, p.z + 0.16f, col);
-                view.Box(p.x - 0.08f, y0 + 0.30f, p.z - 0.08f, p.x + 0.08f, y0 + 0.44f, p.z + 0.08f, ColEmberCore);
+                if (e.sr == null) continue;
+                e.sr.enabled = InWorld || phase == Phase.Dead || phase == Phase.Story;
+                var world = new Vector2(e.pos.x + 0.5f, level.h - 1 - e.pos.y + 0.5f);
+                float pulse = 1f + 0.18f * Mathf.Sin(Time.time * 9f + e.cell.y);
+                e.sr.transform.position = new Vector3(world.x, world.y, -0.8f);
+                e.sr.transform.localScale = new Vector3(pulse, pulse, 1f);
             }
-            // seeds lying in the world: small crystals that hover and pulse, only where the lantern has been
-            foreach (var k in pickupsLeft)
+            for (int k = 0; k < pickupSprites.Count; k++)
             {
-                int i = k.y * level.w + k.x;
-                if (!(allSeen || seen[i])) continue;
-                var p = CellCentre(k.x, k.y);
-                float ybase = FloorTop + 0.16f + 0.05f * Mathf.Sin(now * 3f + k.x);
-                float glow = 0.5f + 0.5f * Mathf.Sin(now * 4f + k.y);
-                var col = Color32.Lerp(ColSeed, ColSeedEdge, glow);
-                view.Box(p.x - 0.11f, ybase, p.z - 0.11f, p.x + 0.11f, ybase + 0.22f, p.z + 0.11f, col);
-                view.Box(p.x - 0.06f, ybase + 0.22f, p.z - 0.06f, p.x + 0.06f, ybase + 0.34f, p.z + 0.06f, col);
+                var sr = pickupSprites[k];
+                if (sr == null) continue;
+                bool live = k < pickupsLeft.Count;
+                sr.enabled = live && (allSeen || seen[pickupsLeft[k].y * level.w + pickupsLeft[k].x]);
+                if (!live) continue;
+                var world = CellCentreWorld(pickupsLeft[k]);
+                float bob = 0.08f * Mathf.Sin(Time.time * 3f + pickupsLeft[k].x);
+                sr.transform.position = new Vector3(world.x, world.y + bob, -0.7f);
             }
-            if (lamp) BuildHero(now);
-            view.Commit();
-        }
-
-        /// <summary>The wanderer: a small body and head standing on its cell, bobbing, with a lantern at its side.</summary>
-        void BuildHero(float now)
-        {
-            var p = CellCentre(heroPos.x, heroPos.y);
-            var under = new Vector2Int(Mathf.RoundToInt(heroPos.x), Mathf.RoundToInt(heroPos.y));
-            float ground = StandingHeight(under);
-            float bob = 0.02f * Mathf.Sin(now * 5f) + 0.02f;
-            // when a lantern goes out the figure sinks into the ground and darkens
-            float sink = phase == Phase.Dead || phase == Phase.GameOver ? EaseOut((now - deathAt) / 0.9f) : 0f;
-            float y0 = ground + bob - sink * 0.95f;
-            var body = Color32.Lerp(ColHero, ColAfter, sink);
-            var head = Color32.Lerp(ColHeroEdge, ColAfter, sink);
-            view.Box(p.x - 0.17f, y0, p.z - 0.17f, p.x + 0.17f, y0 + 0.42f, p.z + 0.17f, body);
-            view.Box(p.x - 0.12f, y0 + 0.46f, p.z - 0.12f, p.x + 0.12f, y0 + 0.70f, p.z + 0.12f, head);
-            if (sink < 0.5f) view.Box(p.x + 0.20f, y0 + 0.18f, p.z - 0.06f, p.x + 0.32f, y0 + 0.34f, p.z + 0.06f, ColLamp);
-        }
-
-        float StandingHeight(Vector2Int c)
-        {
-            if (!InBounds(c)) return FloorTop;
-            int i = c.y * level.w + c.x;
-            if (sim.Cells[i] == Sim.Alive) return AliveTop + Mathf.Min(sim.Ages[i], 5) * 0.04f;
-            return FloorTop;
         }
 
         // ------------------------------------------------------------------ HUD
@@ -1085,7 +1119,7 @@ namespace PointOfOrigin
 
             switch (phase)
             {
-                case Phase.Place:
+                case Phase.Play:
                     Add("Grow  [Enter]", Grow, seeds.Count > 0);
                     Add("Skip  [N]", Skip);
                     if (CanReveal) Add("Reveal  [V]", Reveal);
@@ -1095,15 +1129,15 @@ namespace PointOfOrigin
                     Add("Rewind  [R]", Rewind);
                     break;
                 case Phase.Result:
-                    if (won)
-                    {
-                        Add("Next  [Enter]", Next);
-                    }
-                    else
+                    if (!won)
                     {
                         Add("Rewind  [R]", Rewind);
                         Add("Skip  [N]", Skip);
                         if (CanReveal) Add("Reveal  [V]", Reveal);
+                    }
+                    else
+                    {
+                        Add("Skip to door  [N]", Skip);
                     }
                     break;
                 case Phase.GameOver:
@@ -1195,35 +1229,34 @@ namespace PointOfOrigin
 
             if (phase != Phase.Title && phase != Phase.Finished && phase != Phase.Story && phase != Phase.GameOver)
             {
-                // top left: level, then the law in plain words
                 GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
                     $"{levelIndex + 1:00} / {set.levels.Length:00}    {level.name}", stH1);
                 GUI.Label(new Rect(24f * s, 54f * s, Screen.width * 0.55f, 48f * s),
                     $"{lawText}   ({level.rule}, {level.steps} generation{(level.steps == 1 ? "" : "s")})", stSmall);
 
-                // top right: seeds or generation, then progress
-                bool placingHud = phase == Phase.Place;
-                string right = placingHud
+                bool playing = phase == Phase.Play;
+                string right = playing
                     ? (fetching ? $"Seeds {seeds.Count} / {level.seeds}   in hand {carried}" : $"Seeds {seeds.Count} / {level.seeds}")
                     : $"Generation {sim.Generation} / {level.steps}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 16f * s, Screen.width * 0.6f, 40f * s), right, stH1Right);
+                var here = CellOf(PlayerCentre);
+                bool onSeed = InBounds(here) && sim.Cells[here.y * level.w + here.x] == Sim.Alive;
                 string sub;
-                bool onLiving = sim.Cells[hero.y * level.w + hero.x] == Sim.Alive;
-                if (!placingHud) sub = $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
-                else if (onLiving) sub = "you stand on living ground: step off before you grow";
+                if (!playing && phase != Phase.Dead) sub = won ? "the door is open: walk to it" : $"match {Mathf.FloorToInt(match * 100f)}%   attempt {attempts}";
+                else if (phase == Phase.Dead) sub = "";
+                else if (onSeed) sub = "you stand in your seed: move away before you grow";
                 else if (fetching && carried == 0 && seeds.Count < level.seeds) sub = pickupsLeft.Count > 0 ? "the seeds lie somewhere in the dark: find them" : "";
                 else if (attempts > 0) sub = $"attempt {attempts + 1}";
-                else sub = "walk to where it began, then press Space";
+                else sub = "find where it began, stand there, press E";
                 sub += $"   lanterns {lives}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
 
-                // bottom left: the hint, or the tip once an attempt has failed
                 string hint = attempts > 0 && !string.IsNullOrEmpty(level.tip) ? "Tip: " + level.tip : level.hint;
                 float buttonsWidth = buttons.Count * 180f * s + 40f * s;
                 GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
 
                 GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
-                    (muted ? "sound off   " : "") + "click or WASD walk   Space plant   Enter grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
+                    (muted ? "sound off   " : "") + "A D move   Space jump   E plant   Enter grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
             }
 
             DrawButtons(gui);
@@ -1238,20 +1271,20 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 36f * s, Screen.width * 0.7f, 60f * s),
                         "You are shown how it ended. Find where it began.", stBody);
                     GUI.Label(new Rect(Screen.width * 0.1f, cy + 92f * s, Screen.width * 0.8f, 100f * s),
-                        "You wake in the dark where something ended. Walk, and its ruins show themselves.\n" +
-                        "Stand where it began, plant the seed, and grow it back exactly.", stBody);
+                        "You wake in the dark among the ruins of something that grew. Run, jump, and find where each ruin began.\n" +
+                        "Plant a seed there, get clear, and grow it back: the growth is the ground that carries you to the door.", stBody);
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(0, Screen.height * 0.74f - 30f * s, Screen.width, 24f * s),
-                        done == 0 ? "levels" : $"levels   ({done} of {set.levels.Length} found)", stSmallCentre);
+                        done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)", stSmallCentre);
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
                     GUI.Label(new Rect(0, Screen.height * 0.74f + 62f * s, Screen.width, 40f * s),
-                        done == 0 ? "click or press Space to begin" : "click or press Space to continue", stBody);
+                        done == 0 ? "click or press Enter to begin" : "click or press Enter to continue", stBody);
                     GUI.color = old;
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
-                        "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity", stSmallRight);
+                        "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity + Houdini", stSmallRight);
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width * 0.5f, 30f * s),
                         (muted ? "sound off (M)" : "M sound") + "   Esc quit", stSmall);
                     break;
@@ -1266,7 +1299,7 @@ namespace PointOfOrigin
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
-                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to wake", stBody);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Enter to wake", stBody);
                     GUI.color = old;
                     break;
                 }
@@ -1294,9 +1327,8 @@ namespace PointOfOrigin
                 }
                 case Phase.Result:
                 {
-                    // a failed result fades away after a moment so the mismatch underneath can be studied
                     float a = Mathf.Clamp01(resultTime * 4f);
-                    if (!won) a *= 1f - Mathf.Clamp01((resultTime - 2.4f) / 0.6f);
+                    a *= 1f - Mathf.Clamp01((resultTime - (won ? 4f : 2.4f)) / 0.6f);
                     if (a <= 0f) break;
                     bool story = won && !string.IsNullOrEmpty(level.outro);
                     float panelH = story ? 190f * s : 140f * s;
@@ -1312,7 +1344,7 @@ namespace PointOfOrigin
                         ly += 54f * s;
                     }
                     string detail = won
-                        ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   Enter or click outside the world for the next one"
+                        ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   the door is open: walk to it"
                         : $"{missing} missing, {extra} astray   -   R to rewind, then move your seeds";
                     GUI.Label(new Rect(0, ly, Screen.width, 40f * s), detail, stSmallCentre);
                     GUI.color = old;
@@ -1328,7 +1360,7 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 90f * s), Epilogue, stBody);
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 150f * s, Screen.width * 0.7f, 40f * s),
                         $"{done} of {set.levels.Length} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stSmallCentre);
-                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space for the menu", stBody);
+                    GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Enter for the menu", stBody);
                     break;
                 }
             }

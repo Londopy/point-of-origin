@@ -2,24 +2,23 @@
 
 *You are shown how it ended. Find where it began.*
 
-A reverse cellular-automaton puzzle set in a small isometric world, made for
-the Cal Poly Game Development Club's **World's First Game Jam** (September
-2026, theme **ORIGIN**). You wake in the dark where something ended. Your
-lantern shows the ruins only around you, and the ground itself rises out of
-the void as you walk it, so you explore to learn the full shape of what a
-simple growth law left behind. Stand where you think it began, plant a seed,
-press Grow, and watch the world grow back: gold where it matches the outline,
-red where it does not. Match it exactly and you have found the origin. Twenty
-chapters, four laws, and in the later ones the seeds themselves lie hidden in
-the world behind rock and must be fetched.
+A side-scrolling platformer built on a reverse cellular-automaton puzzle,
+made for the Cal Poly Game Development Club's **World's First Game Jam**
+(September 2026, theme **ORIGIN**). You wake in the dark among the ruins of
+something that grew. Your lantern shows the ghost of it only around you, so
+you run and jump through the ruins to learn the full shape of what a simple
+growth law left behind. Find the point it grew from, stand there, plant a
+seed, get clear, and press Grow: the living cells rise as solid ground, gold
+where they match the outline, red where they do not, and when the growth is
+exact the door opens and the growth is the bridge that carries you to it.
 
-It can go wrong. Living growth overgrows whoever stands on it, so step off
-your seed and out of the outline before you grow, or run. Embers drift along
-rows and columns in the later chapters and burn what they touch. You carry
-three lanterns per chapter; lose them all and the dark takes you, then you
-try again.
+It can go wrong. Living growth overgrows whoever stands inside it, so move
+away from your seed before you grow, or run. The void below the world takes
+anyone who falls. Embers drift along rows and columns in the later chapters
+and burn what they touch. You carry three lanterns per chapter; lose them all
+and the dark takes you, then you try again.
 
-![Confluence, part-way explored](docs/screenshots/12_world_finale.png)
+![First Bloom, the growth rising](docs/screenshots/03_growing.png)
 
 ## Three languages, one game
 
@@ -60,27 +59,29 @@ fails, close Unity and run the build again.
 
 | Input | Action |
 | --- | --- |
-| Left click a cell | Walk there (the wanderer finds a way around rock); click the cell you stand on to plant or remove a seed |
-| WASD / arrows | Walk one cell at a time (hold to keep walking) |
-| Space | Plant or remove a seed where you stand (planting past the limit replaces the oldest) |
-| Right click | Remove a seed |
-| Enter / G | Grow; while growing, finish instantly; after a win, next level |
-| R | Rewind to your seeds |
+| A / D or arrows | Run |
+| Space, W or Up | Jump (hold for height, let go early for a hop) |
+| E | Plant or take back a seed in the cell you stand in (planting past the limit replaces the oldest) |
+| Enter / G | Grow; while growing, finish instantly |
+| R | Rewind the growth (planted seeds stay) |
 | N | Skip the level |
 | V | Reveal the designer's origins (after two failed attempts) |
 | M | Sound on or off |
 | Esc | Back to the menu; quit from the menu (player build) |
 
-Progress is saved between runs; the menu has a level select and replays the
-last solved level's origins growing.
+Progress is saved between runs; the menu has a chapter select and replays the
+last solved chapter's origins growing. `tools/platform_check.py` checks every
+chapter for reachability (stone, seeds, a safe place to stand, the door once
+grown) with a coarse jump model; run it after editing a level.
 
 ## Levels
 
-Levels are plain text in `levels/`. `#` is rock, `o` an origin, `s` where the
-wanderer wakes, `k` a seed lying in the world (when a level has any, the
-wanderer starts empty-handed and must fetch them), `e` an ember that patrols
-its row and `E` one that patrols its column, and the tool grows the target
-for you. `intro` and `outro` lines carry the story:
+Levels are plain text in `levels/`, side view, row 0 at the top. `#` is rock,
+`o` an origin, `s` where the wanderer wakes, `x` the door, `k` a seed lying in
+the world (when a level has any, the wanderer starts empty-handed and must
+fetch them), `e` an ember that patrols its row and `E` one that patrols its
+column, and the tool grows the target for you. `intro` and `outro` lines carry
+the story:
 
 ```
 name Ember

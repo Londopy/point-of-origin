@@ -39,6 +39,8 @@ struct Level {
     embers: List((i64, i64, bool))     // x, y, patrols vertically
     start: (i64, i64)
     has_start: bool
+    exit: (i64, i64)
+    has_exit: bool
     w: i64
     h: i64
 }
@@ -48,7 +50,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         .name = String.new(), .hint = String.new(), .tip = String.new(), .intro = String.new(), .outro = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
         .pickups = List((i64, i64)).new(), .embers = List((i64, i64, bool)).new(),
-        .start = (0, 0), .has_start = false, .w = 0, .h = 0,
+        .start = (0, 0), .has_start = false, .exit = (0, 0), .has_exit = false, .w = 0, .h = 0,
     }
     var in_map = false
     for line in text.lines() {
@@ -93,6 +95,10 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
             if c == 'k' or c == 'K' { lv.pickups.append((x as i64, y as i64)) }
             if c == 'e' { lv.embers.append((x as i64, y as i64, false)) }
             if c == 'E' { lv.embers.append((x as i64, y as i64, true)) }
+            if c == 'x' or c == 'X' {
+                lv.exit = (x as i64, y as i64)
+                lv.has_exit = true
+            }
             if c == 's' or c == 'S' {
                 lv.start = (x as i64, y as i64)
                 lv.has_start = true
@@ -178,6 +184,7 @@ fn preview(lv: *Level, target: []u8, rock: []u8) {
             let is_rock = i < rock.len and rock[i] == '#'
             if is_rock { line.push_byte('X') }
             else if lv.has_start and lv.start.0 == x and lv.start.1 == y { line.push_byte('S') }
+            else if lv.has_exit and lv.exit.0 == x and lv.exit.1 == y { line.push_byte('x') }
             else if is_pickup(lv, x, y) { line.push_byte('k') }
             else if is_ember(lv, x, y) { line.push_byte('e') }
             else if is_origin(lv, x, y) { line.push_byte(if alive { '@' } else { 'o' }) }
@@ -259,6 +266,8 @@ fn main() -> u8 {
         json.set(&mut obj, "pickups", json.string(pickups[..]))
         let embers = embers_text(&lv)
         json.set(&mut obj, "embers", json.string(embers[..]))
+        let exit = if lv.has_exit { format("{},{}", .{lv.exit.0, lv.exit.1}) } else { String.new() }
+        json.set(&mut obj, "exit", json.string(exit[..]))
         json.push(&mut levels, obj)
         count += 1
         let solutions = num_of(&grown, "solutions")

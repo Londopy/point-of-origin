@@ -11,7 +11,7 @@ namespace PointOfOrigin
 
         AudioSource src;
         AudioSource pad;
-        AudioClip place, remove, success, fail, reveal, rewind, select, blocked;
+        AudioClip place, remove, success, fail, reveal, rewind, select, blocked, jump;
         readonly AudioClip[] steps = new AudioClip[2];
         readonly AudioClip[] ticks = new AudioClip[16];
 
@@ -29,6 +29,7 @@ namespace PointOfOrigin
             fail = Tone("fail", 0.35f, 98f, 0.40f, Wave.Saw);
             rewind = Sweep("rewind", 0.28f, 640f, 160f, 0.22f);
             blocked = Tone("blocked", 0.09f, 140f, 0.22f, Wave.Saw);
+            jump = Sweep("jump", 0.12f, 320f, 720f, 0.16f);
             steps[0] = Tone("step0", 0.03f, 620f, 0.07f, Wave.Triangle);
             steps[1] = Tone("step1", 0.03f, 700f, 0.07f, Wave.Triangle);
             for (int i = 0; i < ticks.Length; i++)
@@ -56,6 +57,7 @@ namespace PointOfOrigin
         public void Reveal() => src.PlayOneShot(reveal);
         public void Rewind() => src.PlayOneShot(rewind);
         public void Blocked() => src.PlayOneShot(blocked);
+        public void Jump() => src.PlayOneShot(jump);
         public void Step(int parity) => src.PlayOneShot(steps[parity & 1]);
         public void Fail() => src.PlayOneShot(fail);
         public void Success() => src.PlayOneShot(success);
