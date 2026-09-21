@@ -47,3 +47,10 @@ unity/*/Assets/Plugins/x86_64/*.exp
 # OS
 Thumbs.db
 .DS_Store
+
+# Editor captures land here before being moved to docs/screenshots
+unity/*/Assets/Screenshots/
+unity/*/Assets/Screenshots.meta
+
+# written by the Performance Testing package during builds
+unity/*/Assets/Resources/PerformanceTestRun*

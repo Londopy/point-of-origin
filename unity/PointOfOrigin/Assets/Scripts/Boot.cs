@@ -8,7 +8,7 @@ namespace PointOfOrigin
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Start()
         {
-            if (Object.FindFirstObjectByType<GameController>() != null) return;
+            if (Object.FindAnyObjectByType<GameController>() != null) return;
             var go = new GameObject("Point of Origin");
             go.AddComponent<Sfx>();
             go.AddComponent<GameController>();

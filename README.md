@@ -9,6 +9,8 @@ You get the seeds the designer had, place them, press Grow, and watch. The
 ghost outline fills in gold where your growth matches and bleeds red where
 it does not. Match it exactly and you have found the origin.
 
+![Headwaters, generation 3 of 5](docs/screenshots/03_level10_growing.png)
+
 ## Three languages, one game
 
 | Part | Language | Where | Why |

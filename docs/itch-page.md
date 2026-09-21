@@ -33,6 +33,6 @@ single ripple to two springs on either side of a river.
 binding generator and level compiler), Unity 6 (C#). Made solo for CPGD's
 World's First Game Jam, theme ORIGIN. Windows, 64-bit.
 
-**Upload:** zip the `Build/Windows` folder produced by the Unity build
-(`PointOfOrigin.exe`, `PointOfOrigin_Data`, `MonoBleedingEdge`, `UnityPlayer.dll`,
-`UnityCrashHandler64.exe`) and mark it as a Windows executable.
+**Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
+`PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a
+Windows executable. Cover image: `docs/cover.png` (630x500).

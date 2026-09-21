@@ -90,6 +90,7 @@ namespace PointOfOrigin
         void Start()
         {
             Application.targetFrameRate = 60;
+            Application.runInBackground = true;
             sfx = GetComponent<Sfx>() ?? gameObject.AddComponent<Sfx>();
 
             cam = Camera.main;
@@ -103,6 +104,9 @@ namespace PointOfOrigin
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = ColBg;
             cam.transform.position = new Vector3(0f, -0.4f, -10f);
+            // The template's volume profile asks for bloom; the game is flat colour and the player build strips the shader.
+            var extra = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            if (extra != null) extra.renderPostProcessing = false;
 
             var grid = new GameObject("Grid");
             sr = grid.AddComponent<SpriteRenderer>();
@@ -597,7 +601,7 @@ namespace PointOfOrigin
                     GUI.color = new Color(1f, 1f, 1f, pulse);
                     GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Space to begin", stBody);
                     GUI.color = old;
-                    GUI.Label(new Rect(0, Screen.height - 60f * s, Screen.width, 30f * s),
+                    GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
                         "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity", stSmallRight);
                     break;
                 }
