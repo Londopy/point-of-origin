@@ -968,7 +968,7 @@ namespace PointOfOrigin
                     // air is empty sky; the unexplored dark is solid black; rock and the ghost frames are drawn
                     if (!visible)
                     {
-                        PaintCell(x, y, isRock ? ColRockDark : ColUnknown, isRock ? ColRockDark : ColUnknown, 0);
+                        PaintFull(x, y, isRock ? ColRockDark : ColUnknown);
                         continue;
                     }
                     if (isRock)
@@ -1023,6 +1023,19 @@ namespace PointOfOrigin
                     bool border = dx == lo || dy == lo || dx == hi - 1 || dy == hi - 1;
                     px[row + dx] = border ? edge : fill;
                 }
+            }
+        }
+
+        /// <summary>Fill a whole cell, gap included: the unexplored dark has no seams.</summary>
+        void PaintFull(int x, int y, Color32 color)
+        {
+            int tw = tex.width;
+            int x0 = x * CellPx;
+            int y0 = (level.h - 1 - y) * CellPx;
+            for (int dy = 0; dy < CellPx; dy++)
+            {
+                int row = (y0 + dy) * tw + x0;
+                for (int dx = 0; dx < CellPx; dx++) px[row + dx] = color;
             }
         }
 
