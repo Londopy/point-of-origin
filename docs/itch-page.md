@@ -65,7 +65,8 @@ browser", viewport 1280 x 720, fullscreen button on, mobile off. Kind of
 project: HTML. Cover image: `docs/cover.png` (630x500). Trailer GIF:
 `docs/loop.gif` (plant, get clear, grow, cross). Screenshots from
 `docs/screenshots/`: `itch_01_tutorial`, `itch_02_fused_bloom`,
-`itch_03_quench`, `itch_04_two_echoes`, `itch_05_ashfall`, `itch_06_shadow`.
+`itch_03_quench`, `itch_04_two_echoes`, `itch_05_ashfall`, `itch_06_shadow`,
+`itch_07_wanderer` (the outfit page).
 
 **itch fields:** Classification: Games. Genre: Platformer, Puzzle. Tags:
 puzzle-platformer, cellular-automata, pixel-art, 2d, singleplayer, chiptune,
