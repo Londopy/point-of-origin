@@ -616,9 +616,12 @@ namespace PointOfOrigin
 
             for (int k = 0; k < count; k++)
             {
+                // the last fossil of the second chapter is a signature pressed into the rock near the door
+                bool signature = levelIndex == 1 && k == count - 1;
                 var law = laws[rng.Next(laws.Length)];
                 var alive = new List<Vector2Int>();
-                using (var fs = new Sim(N, N))
+                if (signature) alive.AddRange(InitialsCells());
+                else using (var fs = new Sim(N, N))
                 {
                     fs.SetRule(law.birth, law.survive);
                     fs.Set(N / 2, N / 2, Sim.Alive);
@@ -636,9 +639,11 @@ namespace PointOfOrigin
 
                 // somewhere fully inside the stone: every covered cell rock, a rock roof above, nothing shared with another fossil
                 int gx = -1, gy = -1;
-                for (int attempt = 0; attempt < 80 && gx < 0; attempt++)
+                int xLo = 1, xHi = Mathf.Max(1, level.w - cw - 2);
+                if (signature) xLo = Mathf.Max(1, level.w - 28);
+                for (int attempt = 0; attempt < 200 && gx < 0; attempt++)
                 {
-                    int tx = 1 + rng.Next(Mathf.Max(1, level.w - cw - 2));
+                    int tx = xLo + rng.Next(Mathf.Max(1, xHi - xLo));
                     int ty = 2 + rng.Next(Mathf.Max(1, level.h - ch - 2));
                     bool ok = true;
                     for (int dy = -1; dy <= ch && ok; dy++)
@@ -657,7 +662,7 @@ namespace PointOfOrigin
                 int x0 = gx * CellPx;
                 int yTop = (level.h - gy) * CellPx - 1;   // top pixel row of grid row gy, in bottom-up texture rows
                 var kept = new HashSet<Vector2Int>();
-                foreach (var a in alive) if (rng.NextDouble() >= 0.15) kept.Add(a);   // the rest eroded away
+                foreach (var a in alive) if (signature || rng.NextDouble() >= 0.15) kept.Add(a);   // the rest eroded away
                 void Put(int ix, int iy, float toBone, float toDark)
                 {
                     if (ix < 0 || iy < 0 || ix >= tw || iy >= level.h * CellPx) return;
@@ -690,7 +695,7 @@ namespace PointOfOrigin
                                 Put(x0 + fx + dx, yTop - (fy + dy), 0f, 0.3f);
                                 continue;
                             }
-                            if (rng.NextDouble() < 0.1) continue;   // chipped
+                            if (!signature && rng.NextDouble() < 0.1) continue;   // chipped
                             float pale = dx == 0 || dy == 0 ? 0.7f : 0.55f;
                             Put(x0 + fx + dx, yTop - (fy + dy), pale, 0f);
                         }
@@ -699,6 +704,24 @@ namespace PointOfOrigin
             fossilPx = pxList.ToArray();
             fossilCell = cellList.ToArray();
             fossilColor = colList.ToArray();
+        }
+
+        /// <summary>The maker's initials, L and C, as fossil cells: three wide and five tall each, a cell apart.</summary>
+        static List<Vector2Int> InitialsCells()
+        {
+            string[] rows =
+            {
+                "#...##",
+                "#..#..",
+                "#..#..",
+                "#..#..",
+                "###.##",
+            };
+            var cells = new List<Vector2Int>();
+            for (int y = 0; y < rows.Length; y++)
+                for (int x = 0; x < rows[y].Length; x++)
+                    if (rows[y][x] == '#') cells.Add(new Vector2Int(x + 2, y + 2));
+            return cells;
         }
 
         static uint Mask(params int[] counts)
