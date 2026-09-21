@@ -15,18 +15,18 @@ jobs:
   windows-player:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: unity/PointOfOrigin/Library
           key: unity-library-${{ hashFiles('unity/PointOfOrigin/Packages/manifest.json') }}
           restore-keys: unity-library-
 
       - name: Build
-        uses: game-ci/unity-builder@v4
+        uses: game-ci/unity-builder@v6
         env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
@@ -38,7 +38,7 @@ jobs:
           buildName: PointOfOrigin
           buildMethod: PointOfOrigin.EditorTools.Builder.PerformBuild
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PointOfOrigin-win64
           path: unity/PointOfOrigin/Build/Windows
