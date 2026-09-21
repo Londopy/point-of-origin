@@ -151,8 +151,11 @@ allowed; shipping late is not.
       into a fresh folder and play three chapters.
 - [x] (done Sunday 11 PM) the repo is public at
       https://github.com/Londopy/point-of-origin; every commit from here is pushed.
-- [ ] 3:45 to 4:30 pm: **publish**. Tag `v1.0` and push the tag, final build,
-      final zip, upload, submit to the jam.
+- [x] (Monday 4:35 PM) **publish, the GitHub half**: final builds of both
+      players (4:29 PM zips), tag `v1.0`, the release drafted by the workflow
+      with both zips attached and the release notes as its body.
+- [ ] **publish, the itch half** (Londo): the page from `docs/itch-page.md`,
+      both zips, submit to the jam.
 - [ ] 4:30 to 5:00 pm: confirm the submission shows on the jam page and the
       download works from the page itself.
 - [ ] 5:00 to 7:00 pm: buffer. Nothing new goes in. Only fixes to a broken upload.
