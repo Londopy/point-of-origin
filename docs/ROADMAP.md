@@ -43,6 +43,9 @@ allowed; shipping late is not.
       into the rock (pale imprints, sediment rim) and drifting spores.
 - [x] commit, build, zip, stop. Sleep is part of the plan.
 
+- [ ] (Londo, two clicks) upload `docs/social-preview.png` in the repo's
+      Settings > Social preview; delete `point-of-origin-old` when ready.
+
 ## Monday morning
 
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**. Jump height, run speed,

@@ -1,7 +1,21 @@
 # Point of Origin
 
 [![CI](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml/badge.svg)](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-b8a98a.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Londopy/point-of-origin?include_prereleases&label=release&color=ffd166)](https://github.com/Londopy/point-of-origin/releases)
+[![Downloads](https://img.shields.io/github/downloads/Londopy/point-of-origin/total?color=ffd166)](https://github.com/Londopy/point-of-origin/releases)
+[![Last commit](https://img.shields.io/github/last-commit/Londopy/point-of-origin?color=4fb4bd)](https://github.com/Londopy/point-of-origin/commits/main)
+[![Chapters](https://img.shields.io/badge/chapters-10-7cf5b0)](levels)
+[![License: MIT](https://img.shields.io/badge/license-MIT-b8a98a)](LICENSE)
+
+[![Odin](https://img.shields.io/badge/Odin-simulation%20core-1e6f8f)](native/sim)
+[![Nexium](https://img.shields.io/badge/Nexium-build%20tooling-6fe3ff)](https://github.com/Londopy/nexium)
+[![Unity 6](https://img.shields.io/badge/Unity%206-game-000000?logo=unity&logoColor=white)](unity/PointOfOrigin)
+[![C#](https://img.shields.io/badge/C%23-Unity%20scripts-512bd4?logo=dotnet&logoColor=white)](unity/PointOfOrigin/Assets/Scripts)
+[![Houdini](https://img.shields.io/badge/Houdini-effects-ff4713?logo=houdini&logoColor=white)](houdini)
+[![Blender](https://img.shields.io/badge/Blender-character-e87d0d?logo=blender&logoColor=white)](blender)
+[![Windows](https://img.shields.io/badge/platform-Windows%20x64-0078d4)](#build)
+
+[![Jam](https://img.shields.io/badge/CPGD%20World's%20First%20Game%20Jam-theme%20ORIGIN-ff5fd2)](https://itch.io/jam/cpgd-wfgj)
 
 *You are shown how it ended. Find where it began.*
 
