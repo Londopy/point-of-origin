@@ -31,7 +31,7 @@ jobs:
         run: odin version
 
       - name: Test the simulation core
-        run: odin test native/sim -out:nx-out/sim_test
+        run: mkdir -p nx-out && odin test native/sim -out:nx-out/sim_test
 
       - name: Build the CLI and the plugin
         run: |
