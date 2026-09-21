@@ -1,0 +1,64 @@
+//! The whole pipeline in one command, run from the repository root:
+//!
+//!     nx run build.nx                 # Odin DLL + CLI, C# bindings, levels.json
+//!     nx run build.nx -- --skip-odin  # only the bindings and the levels
+//!     nx run build.nx -- --unity path/to/UnityProject
+//!
+//! The Unity Editor keeps a native plugin loaded until it exits, so if the
+//! DLL copy fails, close the Editor (or restart it) and run again.
+
+import std.fs
+import std.process
+import std.args
+
+const UNITY = "unity/PointOfOrigin"
+const DLL = "origin_sim.dll"
+const DLL_BUILT = "nx-out/native/origin_sim.dll"
+const CLI_BUILT = "tools/bin/origin_cli.exe"
+
+fn run(argv: [][]u8) -> bool {
+    var line = String.new()
+    for a, i in argv {
+        if i > 0 { line.append(" ") }
+        line.append(a)
+    }
+    println("> {}", .{line})
+    let out = process.run(argv) catch { eprintln("  cannot start {}", .{argv[0]}); return false }
+    if out.stdout.len > 0 { print("{}", .{out.stdout}) }
+    if out.stderr.len > 0 { eprintln("{}", .{out.stderr.trim()}) }
+    return out.ok()
+}
+
+fn main() -> u8 {
+    var p = args.Parser.new(os.args())
+    let skip_odin = p.flag("--skip-odin", "")
+    let unity = p.option("--unity", "-u") orelse UNITY
+    let plugins = fs.join(unity, "Assets/Plugins/x86_64")
+    let bindings = fs.join(unity, "Assets/Scripts/Native/PoNative.cs")
+    let levels_json = fs.join(unity, "Assets/StreamingAssets/levels.json")
+
+    if !skip_odin {
+        fs.make_dirs("nx-out/native") catch {}
+        fs.make_dirs("tools/bin") catch {}
+        let dll_out = format("-out:{}", .{DLL_BUILT})
+        let dll_args = ["odin", "build", "native/plugin", "-build-mode:dll", dll_out[..], "-o:speed"]
+        if !run(dll_args[..]) { eprintln("build: the DLL did not build", .{}); return 1 }
+        let cli_out = format("-out:{}", .{CLI_BUILT})
+        let cli_args = ["odin", "build", "native/cli", cli_out[..], "-o:speed"]
+        if !run(cli_args[..]) { eprintln("build: the CLI did not build", .{}); return 1 }
+        fs.make_dirs(plugins[..]) catch {}
+        let dest = fs.join(plugins[..], DLL)
+        fs.copy(DLL_BUILT, dest[..]) catch {
+            eprintln("build: cannot copy the DLL to {}; if the Unity Editor is open it is holding the old one, close it and run again", .{dest})
+            return 1
+        }
+        println("build: {} -> {}", .{DLL, dest})
+    }
+
+    let bind_args = ["nx", "run", "tools/bindgen.nx", "--", "native/plugin/plugin.odin", bindings[..]]
+    if !run(bind_args[..]) { return 1 }
+    let level_args = ["nx", "run", "tools/levels.nx", "--", "levels", levels_json[..], "--cli", CLI_BUILT, "--quiet"]
+    if !run(level_args[..]) { return 1 }
+    println("build: done", .{})
+    return 0
+}

@@ -1,0 +1,49 @@
+# Nexium and Odin build output
+nx-out/
+tools/bin/
+*.pdb
+*.exp
+*.lib
+*.obj
+*.o
+
+# Packaged builds
+Build/
+dist/
+
+# Unity (project lives in unity/PointOfOrigin)
+unity/*/[Ll]ibrary/
+unity/*/[Tt]emp/
+unity/*/[Oo]bj/
+unity/*/[Bb]uild/
+unity/*/[Bb]uilds/
+unity/*/[Ll]ogs/
+unity/*/[Uu]ser[Ss]ettings/
+unity/*/[Mm]emoryCaptures/
+unity/*/[Rr]ecordings/
+unity/*/.vs/
+unity/*/.idea/
+unity/*/*.csproj
+unity/*/*.sln
+unity/*/*.suo
+unity/*/*.user
+unity/*/*.userprefs
+unity/*/*.pidb
+unity/*/*.booproj
+unity/*/*.svd
+unity/*/*.pdb
+unity/*/*.mdb
+unity/*/*.opendb
+unity/*/*.VC.db
+unity/*/*.apk
+unity/*/*.aab
+unity/*/*.unitypackage
+unity/*/*.app
+unity/*/crashlytics-build.properties
+unity/*/Assets/Plugins/x86_64/*.pdb
+unity/*/Assets/Plugins/x86_64/*.lib
+unity/*/Assets/Plugins/x86_64/*.exp
+
+# OS
+Thumbs.db
+.DS_Store

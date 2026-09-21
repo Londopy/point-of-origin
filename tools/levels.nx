@@ -1,0 +1,220 @@
+//! levels: compiles the level files under levels/ into the JSON the game
+//! loads. A level names its rule and step count and draws a map where `#` is
+//! rock and `o` an origin. The pattern the player must reproduce is grown by
+//! the Odin simulation (native/cli), the same code the game runs, so every
+//! level is solvable by construction.
+//!
+//!     nx run tools/levels.nx -- levels unity/PointOfOrigin/Assets/StreamingAssets/levels.json --cli tools/bin/origin_cli.exe
+//!
+//! Level file:
+//!     name First Ripple
+//!     rule B1/S012345678
+//!     steps 3
+//!     seeds 1              // optional: how many seeds the player gets (default: the origins)
+//!     hint One point. Click where it began.
+//!     map
+//!     .....
+//!     ..o..
+//!     .....
+//!     end
+
+import std.fs
+import std.json
+import std.process
+import std.strings
+import std.args
+
+struct Level {
+    name: String
+    hint: String
+    rule: String
+    steps: i64
+    seeds: i64
+    rows: List(String)
+    origins: List((i64, i64))
+    w: i64
+    h: i64
+}
+
+fn parse_level(text: []u8, path: []u8) -> !Level {
+    var lv = Level{
+        .name = String.new(), .hint = String.new(), .rule = String.from("B3/S23"),
+        .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
+        .w = 0, .h = 0,
+    }
+    var in_map = false
+    for line in text.lines() {
+        let s = line.trim()
+        if in_map {
+            if s == "end" { in_map = false; continue }
+            if s.len == 0 { continue }
+            lv.rows.append(String.from(s))
+            continue
+        }
+        if s.len == 0 or s.starts_with("//") { continue }
+        if s == "map" { in_map = true; continue }
+        let cut = strings.split_once(s, " ") orelse (s, "")
+        let key = cut.0
+        let val = cut.1.trim()
+        if key == "name" { lv.name = String.from(val) }
+        else if key == "hint" { lv.hint = String.from(val) }
+        else if key == "rule" { lv.rule = String.from(val) }
+        else if key == "steps" { lv.steps = try val.parse_int(i64) }
+        else if key == "seeds" { lv.seeds = try val.parse_int(i64) }
+        else {
+            eprintln("{}: unknown key {}", .{path, key})
+            return error.InvalidInput
+        }
+    }
+    if lv.rows.len == 0 {
+        eprintln("{}: no map", .{path})
+        return error.InvalidInput
+    }
+    lv.h = lv.rows.len as i64
+    lv.w = lv.rows[0].len as i64
+    for row, y in lv.rows {
+        if row.len as i64 != lv.w {
+            eprintln("{}: map row {} has {} cells, the first has {}", .{path, y, row.len, lv.w})
+            return error.InvalidInput
+        }
+        for c, x in row[..] {
+            if c == 'o' or c == 'O' { lv.origins.append((x as i64, y as i64)) }
+        }
+    }
+    if lv.origins.len == 0 {
+        eprintln("{}: no origin ('o') on the map", .{path})
+        return error.InvalidInput
+    }
+    if lv.seeds == 0 { lv.seeds = lv.origins.len as i64 }
+    return lv
+}
+
+/// The rock rows as one string: `#` rock, `.` anything else, `sep` between rows.
+fn rock_text(lv: *Level, sep: []u8) -> String {
+    var out = String.new()
+    for row, i in lv.rows {
+        if i > 0 { out.append(sep) }
+        for c in row[..] { out.push_byte(if c == '#' { '#' } else { '.' }) }
+    }
+    return out
+}
+
+/// The origins as `x,y;x,y`.
+fn seeds_text(lv: *Level) -> String {
+    var out = String.new()
+    for o, i in lv.origins {
+        if i > 0 { out.append(";") }
+        out.append(format("{},{}", .{o.0, o.1})[..])
+    }
+    return out
+}
+
+fn num_of(v: *json.Json, key: []u8) -> f64 {
+    let m = json.get(v, key) orelse return -1.0
+    return json.as_num(m) orelse -1.0
+}
+
+fn str_of(v: *json.Json, key: []u8) -> []u8 {
+    let m = json.get(v, key) orelse return ""
+    return json.as_str(m) orelse ""
+}
+
+fn is_origin(lv: *Level, x: i64, y: i64) -> bool {
+    for o in lv.origins { if o.0 == x and o.1 == y { return true } }
+    return false
+}
+
+/// Print the grown level: `X` rock, `o` origin, `@` origin still alive, `#` alive.
+fn preview(lv: *Level, target: []u8, rock: []u8) {
+    println("  {}  rule {}  steps {}  seeds {}  ({}x{})", .{lv.name, lv.rule, lv.steps, lv.seeds, lv.w, lv.h})
+    for y in 0..lv.h {
+        var line = String.from("    ")
+        for x in 0..lv.w {
+            let i = (y * lv.w + x) as usize
+            let alive = i < target.len and target[i] == '#'
+            let is_rock = i < rock.len and rock[i] == '#'
+            if is_rock { line.push_byte('X') }
+            else if is_origin(lv, x, y) { line.push_byte(if alive { '@' } else { 'o' }) }
+            else if alive { line.push_byte('#') }
+            else { line.push_byte('.') }
+        }
+        println("{}", .{line})
+    }
+}
+
+fn main() -> u8 {
+    var p = args.Parser.new(os.args())
+    let cli = p.option("--cli", "-c") orelse "tools/bin/origin_cli.exe"
+    let quiet = p.flag("--quiet", "-q")
+    let rest = p.rest()
+    let src_dir = if rest.len > 0 { rest[0] } else { "levels" }
+    let out_path = if rest.len > 1 { rest[1] } else { "levels.json" }
+
+    let names = fs.list(src_dir) catch { eprintln("levels: cannot list {}", .{src_dir}); return 1 }
+    var levels = json.array()
+    var count: usize = 0
+    for name in names {
+        if !name[..].ends_with(".origin") { continue }
+        let path = fs.join(src_dir, name[..])
+        let text = fs.read(path[..]) catch { eprintln("levels: cannot read {}", .{path}); return 1 }
+        let lv = parse_level(text[..], path[..]) catch { return 1 }
+
+        let w = format("{}", .{lv.w})
+        let h = format("{}", .{lv.h})
+        let steps = format("{}", .{lv.steps})
+        let rock_rows = rock_text(&lv, ";")
+        let rock_flat = rock_text(&lv, "")
+        let seeds = seeds_text(&lv)
+        var argv = List([]u8).new()
+        argv.append(cli)
+        argv.append("--w"); argv.append(w[..])
+        argv.append("--h"); argv.append(h[..])
+        argv.append("--rule"); argv.append(lv.rule[..])
+        argv.append("--steps"); argv.append(steps[..])
+        argv.append("--seeds"); argv.append(seeds[..])
+        argv.append("--rock"); argv.append(rock_rows[..])
+        let out = process.run(argv[..]) catch { eprintln("levels: cannot start {}", .{cli}); return 1 }
+        if !out.ok() {
+            eprintln("{}: {} failed:\n{}", .{path, cli, out.stderr})
+            return 1
+        }
+        let grown = json.parse(out.text()) catch { eprintln("{}: unreadable output from {}: {}", .{path, cli, out.text()}); return 1 }
+        let target = str_of(&grown, "target")
+        if target.len as i64 != lv.w * lv.h {
+            eprintln("{}: target has {} cells, expected {}", .{path, target.len, lv.w * lv.h})
+            return 1
+        }
+        if num_of(&grown, "alive") <= 0.0 {
+            eprintln("{}: nothing is alive after {} steps; the level cannot be played", .{path, lv.steps})
+            return 1
+        }
+
+        var obj = json.object()
+        json.set(&mut obj, "name", json.string(lv.name[..]))
+        json.set(&mut obj, "hint", json.string(lv.hint[..]))
+        json.set(&mut obj, "rule", json.string(lv.rule[..]))
+        json.set(&mut obj, "w", json.number(lv.w as f64))
+        json.set(&mut obj, "h", json.number(lv.h as f64))
+        json.set(&mut obj, "birth", json.number(num_of(&grown, "birth")))
+        json.set(&mut obj, "survive", json.number(num_of(&grown, "survive")))
+        json.set(&mut obj, "steps", json.number(lv.steps as f64))
+        json.set(&mut obj, "seeds", json.number(lv.seeds as f64))
+        json.set(&mut obj, "rock", json.string(rock_flat[..]))
+        json.set(&mut obj, "target", json.string(target))
+        json.set(&mut obj, "origins", json.string(seeds[..]))
+        json.push(&mut levels, obj)
+        count += 1
+        if !quiet { preview(&lv, target, rock_flat[..]) }
+    }
+    if count == 0 {
+        eprintln("levels: no .origin files in {}", .{src_dir})
+        return 1
+    }
+
+    var doc = json.object()
+    json.set(&mut doc, "levels", levels)
+    fs.make_dirs(fs.parent(out_path)) catch {}
+    fs.write(out_path, json.pretty(&doc, 2)[..]) catch { eprintln("levels: cannot write {}", .{out_path}); return 1 }
+    println("levels: {} compiled -> {}", .{count, out_path})
+    return 0
+}
