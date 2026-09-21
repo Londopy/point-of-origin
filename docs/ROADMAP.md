@@ -102,6 +102,15 @@ allowed; shipping late is not.
 - [ ] First thing: **Controls page text is cut off** (Londo, 3:50 AM, after the
       third build). Check the page at 1280x720 and full screen; the gamepad note
       and the row labels are the suspects.
+- [ ] **WebGL build** (Londo wants to try for it Monday; a browser build on
+      itch gets far more jam plays). The module is installed. The blocker is
+      the Odin core: either a C# port of the simulation (kept honest by a test
+      that grows every chapter both ways and compares to the CLI), or the Odin
+      plugin built with `-target:freestanding_wasm32` on a static arena, since
+      wasm has no allocator. Then PlayerPrefs, the synthesised audio, the wall
+      fetch (raw.githubusercontent.com allows cross-origin) and OpenURL all
+      work as they are. Budget three hours; itch upload as HTML5 with the
+      Windows zip beside it. Do it only after the Windows build is submitted.
 - [ ] If there is time after publish: **character design**. A simple way to
       make the wanderer yours: a few palette swaps (robe, lantern glow) and a
       hat or two, chosen on a page in the menus and saved with progress. The
@@ -142,7 +151,8 @@ allowed; shipping late is not.
 ## Explicitly not doing
 
 - 3D platforming or a 3D world (not reachable by Monday).
-- WebGL (the Odin DLL cannot ship there without a second sim implementation).
+- WebGL before the Windows build is submitted (see the Monday list: it needs a
+  C# port of the core or a wasm build of the Odin plugin, and comes after).
 - Multiplayer, leaderboards, cloud anything (the wall of initials is a text
   file in this repository fed by a GitHub issue; no server).
 
