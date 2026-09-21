@@ -20,14 +20,17 @@ find the ghost of what grew here and work out where it began. Stand on that
 spot, plant the seed, get clear, and press Grow. The living cells rise as solid
 ground: gold where they match the outline, red where they do not. Match it
 exactly and the door opens, and the growth is the bridge that carries you
-there. Ten chapters across four laws, from a single bloom over a chasm to a
-tall cave, two echoes that cancel each other, and a mesa grown against a wall.
-Early on the stone is where you can stand; later the cliffs cut the growth
-short and you have to count generations back from what is left.
+there. Ten chapters across four laws, and each asks a different question of
+you: two blooms fused into one slab, three sparks whose rings merged, a coral
+that grew in the shadow of a post, echoes cut short by cliffs or bent around
+rock, two echoes that cancelled each other, a mesa grown against a wall.
 Mind your feet: growth overgrows whoever stands inside it, the void takes
-whoever falls, and embers patrol the ruins, though a bloom that catches one
-puts it out. Three lanterns per chapter. The first chapter walks you through
-the loop one prompt at a time. Progress is saved, and a tip appears after a
+whoever falls, acid pools and spikes take the careless, vents breathe fire on
+a count, some ledges crumble under you, and embers patrol the ruins, though a
+bloom that catches one puts it out. Three lanterns per chapter. The lantern
+in your hand talks. The first chapter walks you through the loop, wrong turn
+included. Chiptune throughout, synthesised at start-up in a different key per
+chapter. Keyboard or gamepad. Progress is saved, and a tip appears after a
 failed attempt if you want one.
 
 **Controls** (rebindable on the Controls page; arrows, W and Enter always work):

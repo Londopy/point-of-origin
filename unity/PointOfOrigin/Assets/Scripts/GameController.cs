@@ -2001,14 +2001,13 @@ namespace PointOfOrigin
                 int gx = i % level.w, gy = i / level.w;
                 if (!(allSeen || seen[i])) continue;
                 int x0 = gx * CellPx, y0 = (level.h - 1 - gy) * CellPx;
-                // two spikes per cell, four pixels wide, pointing up
-                for (int dy = 0; dy < 6; dy++)
-                    for (int s = 0; s < 2; s++)
-                    {
-                        int half = dy / 2;   // 0..2: the spike narrows toward its point
-                        for (int dx = half; dx < 4 - half; dx++)
-                            px[(y0 + dy) * tw + x0 + s * 4 + dx] = dy < 2 ? ColRockEdge : ColSpike;
-                    }
+                // two spikes per cell: a three-wide base, then a one-pixel shaft up to the point
+                for (int s = 0; s < 2; s++)
+                {
+                    int bx = x0 + s * 4;
+                    for (int dx = 0; dx < 3; dx++) { px[y0 * tw + bx + dx] = ColRockEdge; px[(y0 + 1) * tw + bx + dx] = ColSpike; }
+                    for (int dy = 2; dy < 7; dy++) px[(y0 + dy) * tw + bx + 1] = dy == 6 ? new Color32(235, 240, 250, 255) : ColSpike;
+                }
             }
             for (int k = 0; k < spouts.Count; k++)
             {
