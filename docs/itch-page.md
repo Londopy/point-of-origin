@@ -20,13 +20,14 @@ find the ghost of what grew here and work out where it began. Stand on that
 spot, plant the seed, get clear, and press Grow. The living cells rise as solid
 ground: gold where they match the outline, red where they do not. Match it
 exactly and the door opens, and the growth is the bridge that carries you
-there. Six chapters across four laws, from a single bloom over a chasm to two
-springs and a shaft between walls. Mind your feet: growth overgrows whoever
-stands inside it, the void takes whoever falls, and embers patrol the ruins.
-Three lanterns per chapter. Progress is saved, and a tip appears after a failed
-attempt if you want one.
+there. Ten chapters across four laws, from a single bloom over a chasm to a
+tall cave, a bar made by two crossed echoes, and a mesa grown around a pillar.
+Mind your feet: growth overgrows whoever stands inside it, the void takes
+whoever falls, and embers patrol the ruins, though a bloom that catches one
+puts it out. Three lanterns per chapter. Progress is saved, and a tip appears
+after a failed attempt if you want one.
 
-**Controls:**
+**Controls** (rebindable on the Controls page; arrows, W and Enter always work):
 
 - A / D or arrows: run; Space: jump
 - E: plant or take back a seed where you stand
@@ -34,14 +35,15 @@ attempt if you want one.
 - R: rewind the growth (seeds stay planted)
 - N: skip a level
 - V: reveal the designer's origins after two failed attempts
-- M: sound on or off, Esc: menu
+- M: sound on or off, Esc: pause menu (settings, controls, credits)
 
 **Made with:** Odin (the cellular-automaton core, as a native DLL), Nexium
 (the build pipeline, the C# binding generator and the level compiler), Unity 6
 (C#: the platformer, the world painter, the HUD, synthesised audio), Houdini
-(the parallax ruin skylines and the simulated growth burst, baked to text and
-replayed by the game) and Blender (the wanderer, rendered flat-shaded). Made
-solo for CPGD's World's First Game Jam, theme ORIGIN. Windows, 64-bit.
+(the parallax ruin skylines, the simulated growth burst and the stone grain,
+baked to text and replayed by the game) and Blender (the wanderer, the ember
+and the seed, rendered flat-shaded). Made solo for CPGD's World's First Game
+Jam, theme ORIGIN. Windows, 64-bit.
 
 **Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
 `PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a

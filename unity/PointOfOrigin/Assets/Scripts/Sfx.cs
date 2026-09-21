@@ -49,7 +49,25 @@ namespace PointOfOrigin
             if (!pad.isPlaying) pad.Play();
         }
 
-        public void SetMuted(bool muted) => AudioListener.volume = muted ? 0f : 1f;
+        float master = 1f;
+        bool mutedNow;
+
+        public void SetMuted(bool muted)
+        {
+            mutedNow = muted;
+            AudioListener.volume = muted ? 0f : master;
+        }
+
+        public void SetMasterVolume(float v)
+        {
+            master = Mathf.Clamp01(v);
+            AudioListener.volume = mutedNow ? 0f : master;
+        }
+
+        public void SetMusicVolume(float v)
+        {
+            if (pad != null) pad.volume = 0.32f * Mathf.Clamp01(v);
+        }
 
         public void Place() => src.PlayOneShot(place);
         public void Remove() => src.PlayOneShot(remove);

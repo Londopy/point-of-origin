@@ -7,7 +7,7 @@ Every block ends with a build that could be uploaded as-is.
 The game pivoted on Sunday evening from the isometric diorama to a **2D
 side-scrolling platformer**: growth is solid ground, the door opens when the
 growth is exact, the void, embers and overgrowth kill, three lanterns per
-chapter. Six chapters exist and pass the reachability check. Everything below
+chapter. Ten chapters exist and pass the reachability check. Everything below
 assumes that shape; the diorama is in git history if we ever want it back.
 
 Update this file as we go: tick boxes, move things, cut things. Cutting is
@@ -21,7 +21,14 @@ allowed; shipping late is not.
       physics tests, build.
 - [x] **assets pass**: Houdini parallax skylines and a baked growth burst,
       a Blender-rendered wanderer, all replayed from text and PNGs in Resources.
-- [ ] 10:30 to 11:30 pm: **first hand playthrough (Londo)**. Play chapters 1 to 6
+- [x] **menu pass**: pause menu, Settings (volumes, sound, shake, fullscreen,
+      progress reset), Controls with rebinding, Credits; the world pauses
+      behind them. Blender sprite colours fixed (Standard view transform),
+      ember and seed sprites, Houdini stone grain on the rock.
+- [x] **four more chapters** (ten now): Quench, Ashfall (vertical), Two
+      Echoes, Origin. Growth quenches embers and embers bounce off growth.
+      All ten pass the checker and solve from the designer's origins.
+- [ ] 10:30 to 11:30 pm: **first hand playthrough (Londo)**. Play chapters 1 to 10
       with a notepad: does jumping feel right, is the stone reachable, did you
       understand "plant, get clear, grow", where did you die and was it fair.
       Hand the notes over; fixes land while you play the next chapter.
@@ -31,13 +38,9 @@ allowed; shipping late is not.
 
 - [ ] 9:00 to 10:00 am: **feel pass from the notes**. Jump height, run speed,
       ember speed, lantern radius, camera lead, the door's look.
-- [ ] 10:00 to 12:00: **four more chapters** (target ten). Each new chapter needs:
-      a growth law whose shape is walkable (bloom, coral, one-generation spark,
-      parity), a stone you can reach, a safe place to stand, a door the growth
-      reaches. Run the checker after every edit. Ideas ready to build: a chapter
-      where the growth must be *avoided* (grow, then run from it); a vertical
-      chapter climbing a coral; two embers on one crossing; a chapter where the
-      seed is behind the door of the previous growth.
+- [ ] 10:00 to 12:00: **chapter polish**. Tune the four new chapters from the
+      notes (ember timing in Quench and Ashfall, the ladder in Origin). If a
+      chapter cannot be made fair by noon, cut it rather than ship it broken.
 - [ ] 12:00 to 1:00 pm: **second playthrough, fresh eyes** (a housemate counts).
       Watch, do not help. Note every stall over thirty seconds.
 
@@ -59,11 +62,10 @@ allowed; shipping late is not.
 
 ## If there is time left over (only after "publish" is ticked)
 
-- Parallax background layers behind the world.
 - A death counter per chapter on the chapter select.
 - Ember variants: one that follows you along its row.
 - The Houdini slab as a decorative backdrop behind the ground.
-- A settings line: volume slider.
+- Gamepad bindings (the input layer is per action already).
 
 ## Explicitly not doing
 

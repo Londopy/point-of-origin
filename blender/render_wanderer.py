@@ -29,6 +29,9 @@ shading.show_shadows = False
 shading.show_cavity = False
 shading.show_object_outline = True
 shading.object_outline_color = (0.05, 0.04, 0.06)
+# plain colours out, no filmic or AgX curve (it greyed the first render)
+scene.view_settings.view_transform = "Standard"
+scene.view_settings.look = "None"
 
 
 def add(op, color, name, **kw):
@@ -70,3 +73,35 @@ for name, lift, swing in frames:
     scene.render.filepath = os.path.join(OUT, name + ".png")
     bpy.ops.render.render(write_still=True)
     print("rendered", scene.render.filepath)
+
+# the ember and the seed, each in its own tiny frame
+for ob in (body, cloak, head, lamp, handle):
+    ob.hide_render = True
+
+EMBER = (1.0, 0.36, 0.12)
+EMBER_CORE = (1.0, 0.89, 0.66)
+ember = add(bpy.ops.mesh.primitive_ico_sphere_add, EMBER, "ember", radius=0.30, location=(0, 0, 0.40), subdivisions=1)
+core = add(bpy.ops.mesh.primitive_uv_sphere_add, EMBER_CORE, "ember_core", radius=0.13, location=(0.04, -0.2, 0.44), segments=12, ring_count=8)
+scene.render.resolution_x = 24
+scene.render.resolution_y = 24
+cam.data.ortho_scale = 0.8
+cam.location = (0, -10, 0.40)
+scene.render.filepath = os.path.join(OUT, "ember.png")
+bpy.ops.render.render(write_still=True)
+print("rendered", scene.render.filepath)
+ember.hide_render = True
+core.hide_render = True
+
+SEED = (0.44, 0.89, 1.0)
+SEED_CORE = (0.85, 0.98, 1.0)
+top = add(bpy.ops.mesh.primitive_cone_add, SEED, "seed_top", radius1=0.22, radius2=0.0, depth=0.42, location=(0, 0, 0.61), vertices=6)
+bottom = add(bpy.ops.mesh.primitive_cone_add, SEED, "seed_bottom", radius1=0.22, radius2=0.0, depth=0.30, location=(0, 0, 0.25), vertices=6)
+bottom.rotation_euler = (math.radians(180), 0, 0)
+glint = add(bpy.ops.mesh.primitive_uv_sphere_add, SEED_CORE, "seed_glint", radius=0.06, location=(0.06, -0.2, 0.52), segments=8, ring_count=6)
+scene.render.resolution_x = 20
+scene.render.resolution_y = 28
+cam.data.ortho_scale = 0.95
+cam.location = (0, -10, 0.42)
+scene.render.filepath = os.path.join(OUT, "seed.png")
+bpy.ops.render.render(write_still=True)
+print("rendered", scene.render.filepath)

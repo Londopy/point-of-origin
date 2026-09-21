@@ -1,13 +1,10 @@
 fileFormatVersion: 2
-guid: 86601664e45fac841881ddd6ae9d278a
+guid: 4338037a9a0f3ff458e1de20fffc92c2
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 1674199508881906401
-    second: wanderer_1_0
-  - first:
-      213: -1942452132476791217
-    second: wanderer_1_1
+      213: 3124949146848436715
+    second: seed_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -118,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: wanderer_1_0
+      name: seed_0
       rect:
         serializedVersion: 2
-        x: 7
-        y: 9
-        width: 34
-        height: 53
+        x: 2
+        y: 3
+        width: 16
+        height: 24
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -133,30 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 1ea1a024593fb3710800000000000000
-      internalID: 1674199508881906401
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: wanderer_1_1
-      rect:
-        serializedVersion: 2
-        x: 37
-        y: 24
-        width: 11
-        height: 18
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: f46558ab3160b05e0800000000000000
-      internalID: -1942452132476791217
+      spriteID: be1af0f31bc0e5b20800000000000000
+      internalID: 3124949146848436715
       vertices: []
       indices: 
       edges: []
@@ -175,8 +150,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      wanderer_1_0: 1674199508881906401
-      wanderer_1_1: -1942452132476791217
+      seed_0: 3124949146848436715
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

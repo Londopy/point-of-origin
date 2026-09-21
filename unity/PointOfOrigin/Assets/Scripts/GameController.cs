@@ -16,6 +16,9 @@ namespace PointOfOrigin
     {
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
+        /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
+        enum Overlay { None, Menu, Settings, Controls, Credits }
+
         class Ember
         {
             public Vector2Int cell;
@@ -45,6 +48,10 @@ namespace PointOfOrigin
         const string KeyUnlocked = "po.unlocked";
         const string KeySolved = "po.solved";
         const string KeyMuted = "po.muted";
+        const string KeyVolume = "po.volume";
+        const string KeyMusic = "po.music";
+        const string KeyShake = "po.shake";
+        const int VolumeSteps = 10;
         const string Epilogue =
             "Every origin found. The world grows again, and you, who were its last seed, walk on in the light.";
 
@@ -62,6 +69,7 @@ namespace PointOfOrigin
         static readonly Color32 ColOpenEdge = Hex("141826");
         static readonly Color32 ColRock = Hex("3a4150");
         static readonly Color32 ColRockEdge = Hex("262b37");
+        static readonly Color32 ColRockLight = Hex("4d5566");
         static readonly Color32 ColGhost = Hex("2a6d74");
         static readonly Color32 ColGhostBright = Hex("4fb4bd");
         static readonly Color32 ColSeed = Hex("6fe3ff");
@@ -162,19 +170,30 @@ namespace PointOfOrigin
         int unlocked;
         int solvedMask;
         bool muted;
+        int volume = VolumeSteps;
+        int music = VolumeSteps;
+        bool shakeOn = true;
+        Overlay overlay = Overlay.None;
+        bool overlayFromMenu;      // a page opened from the pause menu goes back there, not to the title
+        GameAction? listening;     // the Controls page is waiting for a key for this action
+        bool confirmReset;
+        float[] grain;             // Houdini-generated stone grain, tileable, replayed onto the rock
+        int grainN;
         float demoTimer;
         int demoStage;
         string fatal;
 
         readonly List<Button> buttons = new List<Button>();
-        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stSmallCentre, stHint, stButton, stBanner, stBody;
+        GUIStyle stTitle, stH1, stH1Right, stSmall, stSmallRight, stSmallCentre, stHint, stButton, stBanner, stBody, stRow, stRowValue;
         Texture2D panelTex;
         int styledHeight;
 
         bool CanReveal => attempts >= RevealAfter && !revealed && (phase == Phase.Play || phase == Phase.Result);
         bool Solved(int i) => (solvedMask & (1 << i)) != 0;
         bool InWorld => phase == Phase.Play || phase == Phase.Growing || phase == Phase.Result;
+        bool Paused => overlay != Overlay.None;
         Vector2 PlayerCentre => new Vector2(pPos.x, pPos.y + PlayerH / 2f);
+        static string L(GameAction a) => InputBridge.Label(a);
 
         // ------------------------------------------------------------------ setup
 
@@ -230,6 +249,28 @@ namespace PointOfOrigin
             emberSprite = Sprite.Create(MakeDot(6, ColEmber, ColEmberCore), new Rect(0, 0, 6, 6), new Vector2(0.5f, 0.5f), CellPx);
             seedSprite = Sprite.Create(MakeDot(5, ColSeed, ColSeedEdge), new Rect(0, 0, 5, 5), new Vector2(0.5f, 0.5f), CellPx);
 
+            // the ember and the seed rendered in Blender, when the PNGs shipped (sized to 0.8 and 0.95 of a cell)
+            var emberTex = Resources.Load<Texture2D>("Sprites/ember");
+            if (emberTex != null)
+                emberSprite = Sprite.Create(emberTex, new Rect(0, 0, emberTex.width, emberTex.height), new Vector2(0.5f, 0.5f), emberTex.height / 0.8f);
+            var seedTex = Resources.Load<Texture2D>("Sprites/seed");
+            if (seedTex != null)
+                seedSprite = Sprite.Create(seedTex, new Rect(0, 0, seedTex.width, seedTex.height), new Vector2(0.5f, 0.5f), seedTex.height / 0.95f);
+
+            // the stone grain Houdini generated: one tileable square of values in 0..1
+            var grainText = Resources.Load<TextAsset>("Backdrop/grain");
+            if (grainText != null)
+            {
+                var values = ParseFloats(grainText.text.Replace("size:", " "));
+                int n = values.Count > 2 ? (int)values[0] : 0;
+                if (n > 0 && values.Count >= 2 + n * n)
+                {
+                    grainN = n;
+                    grain = new float[n * n];
+                    for (int i = 0; i < grain.Length; i++) grain[i] = values[i + 2];
+                }
+            }
+
             // the wanderer rendered in Blender, if the frames shipped; otherwise the pixel figure above
             var f0 = Resources.Load<Texture2D>("Sprites/wanderer_0");
             var f1 = Resources.Load<Texture2D>("Sprites/wanderer_1");
@@ -276,6 +317,12 @@ namespace PointOfOrigin
             unlocked = PlayerPrefs.GetInt(KeyUnlocked, 0);
             solvedMask = PlayerPrefs.GetInt(KeySolved, 0);
             muted = PlayerPrefs.GetInt(KeyMuted, 0) != 0;
+            volume = Mathf.Clamp(PlayerPrefs.GetInt(KeyVolume, VolumeSteps), 0, VolumeSteps);
+            music = Mathf.Clamp(PlayerPrefs.GetInt(KeyMusic, VolumeSteps), 0, VolumeSteps);
+            shakeOn = PlayerPrefs.GetInt(KeyShake, 1) != 0;
+            InputBridge.Load();
+            sfx.SetMasterVolume(volume / (float)VolumeSteps);
+            sfx.SetMusicVolume(music / (float)VolumeSteps);
             sfx.SetMuted(muted);
             sfx.StartAmbient();
 
@@ -353,7 +400,7 @@ namespace PointOfOrigin
         static List<float> ParseFloats(string text)
         {
             var list = new List<float>();
-            foreach (var tok in text.Split(new[] { ' ', '\t', ',' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var tok in text.Split(new[] { ' ', '\t', ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
                 if (float.TryParse(tok, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v))
                     list.Add(v);
             return list;
@@ -426,17 +473,7 @@ namespace PointOfOrigin
             pickupsLeft.AddRange(level.PickupCells());
             fetching = pickupsLeft.Count > 0;
             carried = fetching ? 0 : level.seeds;
-            foreach (var e in embers) if (e.sr != null) Destroy(e.sr.gameObject);
-            embers.Clear();
-            foreach (var spec in level.EmberSpecs())
-            {
-                var go = new GameObject("Ember");
-                var sr = go.AddComponent<SpriteRenderer>();
-                sr.sprite = emberSprite;
-                sr.sortingOrder = 8;
-                sr.sharedMaterial = playerSr.sharedMaterial;
-                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right, sr = sr });
-            }
+            SpawnEmbers();
             foreach (var s in pickupSprites) if (s != null) Destroy(s.gameObject);
             pickupSprites.Clear();
             foreach (var k in pickupsLeft)
@@ -482,6 +519,37 @@ namespace PointOfOrigin
             Paint();
         }
 
+        /// <summary>Every ember back on its starting cell: on load, and on every rewind (growth may have quenched some).</summary>
+        void SpawnEmbers()
+        {
+            foreach (var e in embers) if (e.sr != null) Destroy(e.sr.gameObject);
+            embers.Clear();
+            foreach (var spec in level.EmberSpecs())
+            {
+                var go = new GameObject("Ember");
+                var sr = go.AddComponent<SpriteRenderer>();
+                sr.sprite = emberSprite;
+                sr.sortingOrder = 8;
+                sr.sharedMaterial = playerSr.sharedMaterial;
+                embers.Add(new Ember { cell = spec.cell, pos = spec.cell, dir = spec.vertical ? new Vector2Int(0, 1) : Vector2Int.right, sr = sr });
+            }
+        }
+
+        /// <summary>Growth puts embers out: any ember standing in a cell that just came alive is gone until the next rewind.</summary>
+        void QuenchEmbers()
+        {
+            for (int k = embers.Count - 1; k >= 0; k--)
+            {
+                var e = embers[k];
+                var c = Vector2Int.RoundToInt(e.pos);
+                if (!InBounds(c) || sim.Cells[c.y * level.w + c.x] != Sim.Alive) continue;
+                if (burstFrames.Count > 0) bursts.Add((c, Time.time));
+                if (e.sr != null) Destroy(e.sr.gameObject);
+                embers.RemoveAt(k);
+                sfx.Remove();
+            }
+        }
+
         /// <summary>World y of the bottom edge of a grid row: row 0 is the top of the map.</summary>
         float WorldY(int gy) => level.h - 1 - gy;
         int GridY(float wy) => level.h - 1 - Mathf.FloorToInt(wy);
@@ -490,6 +558,9 @@ namespace PointOfOrigin
         bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < level.w && c.y < level.h;
         bool Open(Vector2Int c) => InBounds(c) && rock[c.y * level.w + c.x] != Sim.Rock;
 
+        /// <summary>Where an ember may go: not rock, and not living growth once it has grown.</summary>
+        bool EmberOpen(Vector2Int c) => Open(c) && !(sim.Generation > 0 && sim.Cells[c.y * level.w + c.x] == Sim.Alive);
+
         int FirstUnsolved()
         {
             for (int i = 0; i < set.levels.Length; i++)
@@ -497,10 +568,11 @@ namespace PointOfOrigin
             return Mathf.Min(unlocked, set.levels.Length - 1);
         }
 
+        /// <summary>The chapter the title replays: the last solved one whose map is short enough to sit under the text.</summary>
         int DemoLevel()
         {
             int best = 0;
-            for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) best = i;
+            for (int i = 0; i < set.levels.Length; i++) if (Solved(i) && set.levels[i].h <= 18) best = i;
             return best;
         }
 
@@ -509,6 +581,9 @@ namespace PointOfOrigin
             PlayerPrefs.SetInt(KeyUnlocked, unlocked);
             PlayerPrefs.SetInt(KeySolved, solvedMask);
             PlayerPrefs.SetInt(KeyMuted, muted ? 1 : 0);
+            PlayerPrefs.SetInt(KeyVolume, volume);
+            PlayerPrefs.SetInt(KeyMusic, music);
+            PlayerPrefs.SetInt(KeyShake, shakeOn ? 1 : 0);
             PlayerPrefs.Save();
         }
 
@@ -533,7 +608,7 @@ namespace PointOfOrigin
                     hit = true;
                     break;
                 }
-                if (!hit)
+                if (!hit && !Paused)
                 {
                     switch (phase)
                     {
@@ -546,29 +621,56 @@ namespace PointOfOrigin
                 }
             }
 
-            if (InputBridge.Pressed(Key.Space, KeyCode.Space) || InputBridge.Pressed(Key.W, KeyCode.W) || InputBridge.Pressed(Key.UpArrow, KeyCode.UpArrow))
+            if (Paused)
             {
-                if (InWorld) jumpBuffer = JumpBufferTime;
-                else Primary();
+                if (listening.HasValue)
+                {
+                    // the Controls page: the next key becomes the binding, Esc cancels
+                    if (InputBridge.AnyKeyPressed(out var key))
+                    {
+                        if (key != Key.Escape) RebindTo(listening.Value, key);
+                        listening = null;
+                        sfx.Select();
+                    }
+                }
+                else if (InputBridge.Pressed(GameAction.Menu) || (overlay == Overlay.Menu && InputBridge.Pressed(GameAction.Confirm)))
+                {
+                    Back();
+                }
             }
-            if (InputBridge.Pressed(Key.E, KeyCode.E) && phase == Phase.Play) PlantHere();
-            if (InputBridge.Pressed(Key.Enter, KeyCode.Return) || InputBridge.Pressed(Key.G, KeyCode.G)) Primary();
-            if (InputBridge.Pressed(Key.R, KeyCode.R) && InWorld) Rewind();
-            if (InputBridge.Pressed(Key.N, KeyCode.N) && (phase == Phase.Play || phase == Phase.Result)) Skip();
-            if (InputBridge.Pressed(Key.V, KeyCode.V) && CanReveal) Reveal();
-            if (InputBridge.Pressed(Key.M, KeyCode.M)) ToggleMute();
-            if (InputBridge.Pressed(Key.Escape, KeyCode.Escape))
+            else
             {
-                if (phase == Phase.Title) { if (!Application.isEditor) Application.Quit(); }
-                else EnterTitle();
+                bool primary = InputBridge.Pressed(GameAction.Grow);
+                if (InputBridge.Pressed(GameAction.Jump))
+                {
+                    if (InWorld) jumpBuffer = JumpBufferTime;
+                    else primary = true;
+                }
+                if (!InWorld && InputBridge.Pressed(GameAction.Confirm)) primary = true;
+                if (primary) Primary();
+                if (InputBridge.Pressed(GameAction.Plant) && phase == Phase.Play) PlantHere();
+                if (InputBridge.Pressed(GameAction.Rewind) && InWorld) Rewind();
+                if (InputBridge.Pressed(GameAction.Skip) && (phase == Phase.Play || phase == Phase.Result)) Skip();
+                if (InputBridge.Pressed(GameAction.Reveal) && CanReveal) Reveal();
+                if (InputBridge.Pressed(GameAction.Mute)) ToggleMute();
+                if (InputBridge.Pressed(GameAction.Menu))
+                {
+                    switch (phase)
+                    {
+                        case Phase.Title: QuitGame(); break;
+                        case Phase.GameOver: case Phase.Finished: EnterTitle(); break;
+                        case Phase.Dead: break;
+                        default: OpenMenu(); break;
+                    }
+                }
             }
 
-            if (InWorld)
+            if (InWorld && !Paused)
             {
                 float move = 0f;
-                if (InputBridge.Held(Key.A, KeyCode.A) || InputBridge.Held(Key.LeftArrow, KeyCode.LeftArrow)) move -= 1f;
-                if (InputBridge.Held(Key.D, KeyCode.D) || InputBridge.Held(Key.RightArrow, KeyCode.RightArrow)) move += 1f;
-                bool jumpHeld = InputBridge.Held(Key.Space, KeyCode.Space) || InputBridge.Held(Key.W, KeyCode.W) || InputBridge.Held(Key.UpArrow, KeyCode.UpArrow);
+                if (InputBridge.Held(GameAction.Left)) move -= 1f;
+                if (InputBridge.Held(GameAction.Right)) move += 1f;
+                bool jumpHeld = InputBridge.Held(GameAction.Jump);
                 StepPlayer(dt, move, jumpHeld);
                 if (InWorld)
                 {
@@ -580,13 +682,13 @@ namespace PointOfOrigin
                 }
             }
 
-            if (phase == Phase.Dead && Time.time - deathAt > DeathSeconds)
+            if (phase == Phase.Dead && !Paused && Time.time - deathAt > DeathSeconds)
             {
                 if (lives > 0) RestartLevel();
                 else phase = Phase.GameOver;
             }
 
-            if (phase == Phase.Growing)
+            if (phase == Phase.Growing && !Paused)
             {
                 stepTimer += Time.deltaTime;
                 while (stepTimer >= StepInterval && phase == Phase.Growing)
@@ -687,11 +789,11 @@ namespace PointOfOrigin
             foreach (var e in embers)
             {
                 var next = e.cell + e.dir;
-                if (!Open(next))
+                if (!EmberOpen(next))
                 {
                     e.dir = -e.dir;
                     next = e.cell + e.dir;
-                    if (!Open(next)) continue;
+                    if (!EmberOpen(next)) continue;
                 }
                 e.pos = Vector2.MoveTowards(e.pos, next, EmberSpeed * dt);
                 if ((e.pos - (Vector2)next).sqrMagnitude < 1e-5f) { e.pos = next; e.cell = next; }
@@ -735,12 +837,15 @@ namespace PointOfOrigin
             return new Vector3(x, y, -10f);
         }
 
+        /// <summary>The title looks at the demo growth but keeps it left of centre, clear of the menu rows.</summary>
         Vector2 DemoFocus()
         {
             if (answer.Count == 0) return new Vector2(level.w / 2f, level.h / 2f);
             var sum = Vector2.zero;
             foreach (var a in answer) sum += CellCentreWorld(a);
-            return sum / answer.Count;
+            var focus = sum / answer.Count;
+            focus.x += ViewHalfH * Mathf.Max(0.1f, cam.aspect) * 0.55f;
+            return focus;
         }
 
         void SnapCamera()
@@ -840,6 +945,7 @@ namespace PointOfOrigin
         void BeginLevel()
         {
             phase = string.IsNullOrEmpty(level.intro) ? Phase.Play : Phase.Story;
+            SnapCamera();   // the load happened under the old phase; look at the wanderer, not the title demo
         }
 
         void Die(string why)
@@ -850,7 +956,7 @@ namespace PointOfOrigin
             deathText = why;
             lives = Mathf.Max(0, lives - 1);
             pVel = Vector2.zero;
-            shake = 0.45f;
+            shake = shakeOn ? 0.45f : 0f;
             sfx.Fail();
         }
 
@@ -924,6 +1030,7 @@ namespace PointOfOrigin
             sfx.Tick(gen);
             TrackChanges();
             match = sim.Compare(target);
+            QuenchEmbers();
             if (PlayerInsideGrowth())
             {
                 Die("OVERGROWN");
@@ -972,7 +1079,11 @@ namespace PointOfOrigin
             stepTimer = 0f;
             won = false;
             phase = Phase.Play;
-            if (hadGrown) sfx.Rewind();
+            if (hadGrown)
+            {
+                SpawnEmbers();
+                sfx.Rewind();
+            }
         }
 
         void Skip()
@@ -1007,6 +1118,110 @@ namespace PointOfOrigin
             muted = !muted;
             sfx.SetMuted(muted);
             SavePrefs();
+        }
+
+        // ------------------------------------------------------------------ menu, settings, controls
+
+        void OpenMenu()
+        {
+            overlay = Overlay.Menu;
+            overlayFromMenu = true;
+            listening = null;
+            confirmReset = false;
+            sfx.Select();
+        }
+
+        void OpenPage(Overlay page)
+        {
+            overlayFromMenu = overlay == Overlay.Menu;
+            overlay = page;
+            listening = null;
+            confirmReset = false;
+            sfx.Select();
+        }
+
+        /// <summary>One step out: a page returns to the pause menu or the title, the pause menu resumes.</summary>
+        void Back()
+        {
+            listening = null;
+            confirmReset = false;
+            overlay = overlay != Overlay.Menu && overlayFromMenu ? Overlay.Menu : Overlay.None;
+            SavePrefs();
+            sfx.Select();
+        }
+
+        void CloseOverlay()
+        {
+            overlay = Overlay.None;
+            listening = null;
+            confirmReset = false;
+            SavePrefs();
+        }
+
+        void SetVolume(int v)
+        {
+            volume = Mathf.Clamp(v, 0, VolumeSteps);
+            sfx.SetMasterVolume(volume / (float)VolumeSteps);
+            SavePrefs();
+            sfx.Place();
+        }
+
+        void SetMusic(int v)
+        {
+            music = Mathf.Clamp(v, 0, VolumeSteps);
+            sfx.SetMusicVolume(music / (float)VolumeSteps);
+            SavePrefs();
+            sfx.Select();
+        }
+
+        void ToggleShake()
+        {
+            shakeOn = !shakeOn;
+            SavePrefs();
+            if (shakeOn) shake = 0.3f;
+            sfx.Select();
+        }
+
+        void ToggleFullscreen()
+        {
+            Screen.fullScreen = !Screen.fullScreen;
+            sfx.Select();
+        }
+
+        /// <summary>Two clicks: the first arms it, the second wipes the chapter progress.</summary>
+        void ResetProgressClicked()
+        {
+            if (!confirmReset)
+            {
+                confirmReset = true;
+                sfx.Blocked();
+                return;
+            }
+            confirmReset = false;
+            unlocked = 0;
+            solvedMask = 0;
+            solved = 0;
+            SavePrefs();
+            sfx.Rewind();
+        }
+
+        /// <summary>Bind a key; if another action already used it, that action takes the old key so nothing is left unbound.</summary>
+        void RebindTo(GameAction action, Key key)
+        {
+            var old = InputBridge.Primary(action);
+            foreach (var other in InputBridge.Rebindable)
+                if (other != action && InputBridge.Primary(other) == key) InputBridge.Bind(other, old);
+            InputBridge.Bind(action, key);
+        }
+
+        void QuitGame()
+        {
+            SavePrefs();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         // ------------------------------------------------------------------ painting
@@ -1091,7 +1306,7 @@ namespace PointOfOrigin
                     }
                     if (isRock)
                     {
-                        PaintCell(x, y, ColRock, ColRockEdge, 0);
+                        PaintRock(x, y);
                         continue;
                     }
                     if (inTarget && !alive) PaintCell(x, y, ghostFill, ghost, 0);
@@ -1141,6 +1356,35 @@ namespace PointOfOrigin
                 {
                     bool border = dx == lo || dy == lo || dx == hi - 1 || dy == hi - 1;
                     px[row + dx] = border ? edge : fill;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Rock is one continuous mass: the Houdini grain tiles across cells with no
+        /// seams, and a lighter line marks the surface where air sits above it.
+        /// </summary>
+        void PaintRock(int x, int y)
+        {
+            int tw = tex.width;
+            int x0 = x * CellPx;
+            int y0 = (level.h - 1 - y) * CellPx;
+            bool surface = y == 0 || rock[(y - 1) * level.w + x] != Sim.Rock;
+            for (int dy = 0; dy < CellPx; dy++)
+            {
+                int row = (y0 + dy) * tw + x0;
+                bool top = surface && dy == CellPx - 1;
+                for (int dx = 0; dx < CellPx; dx++)
+                {
+                    Color32 c;
+                    if (grain != null)
+                    {
+                        float g = grain[((y0 + dy) % grainN) * grainN + ((x0 + dx) % grainN)];
+                        c = Color32.Lerp(ColRockEdge, ColRockLight, g);
+                    }
+                    else c = ColRock;
+                    if (top) c = Lighten(c, 0.28f);
+                    px[row + dx] = c;
                 }
             }
         }
@@ -1218,11 +1462,27 @@ namespace PointOfOrigin
         // ------------------------------------------------------------------ HUD
 
         float S => Screen.height / 800f;
+        float TitleRowY => Screen.height * 0.64f;
+        float PageTop => Screen.height * 0.16f;
+        float RowH => 54f * S;
+
+        /// <summary>The column every page lays its rows in.</summary>
+        Rect PageRect()
+        {
+            float w = Mathf.Min(760f * S, Screen.width - 48f * S);
+            return new Rect((Screen.width - w) / 2f, PageTop, w, Screen.height - PageTop - 40f * S);
+        }
 
         void Layout()
         {
             buttons.Clear();
             float s = S;
+
+            if (Paused)
+            {
+                LayoutOverlay();
+                return;
+            }
 
             if (phase == Phase.Title)
             {
@@ -1230,7 +1490,7 @@ namespace PointOfOrigin
                 float b = 44f * s, gap = 10f * s;
                 float total = n * b + (n - 1) * gap;
                 float x0 = (Screen.width - total) / 2f;
-                float y = Screen.height * 0.74f;
+                float y = TitleRowY;
                 for (int i = 0; i < n; i++)
                 {
                     int index = i;
@@ -1243,6 +1503,14 @@ namespace PointOfOrigin
                         gold = Solved(i),
                     });
                 }
+                // the menu row under the chapters
+                string[] names = { "Settings", "Controls", "Credits", "Quit" };
+                Action[] acts = { () => OpenPage(Overlay.Settings), () => OpenPage(Overlay.Controls), () => OpenPage(Overlay.Credits), QuitGame };
+                float mw = 150f * s, mh = 40f * s, mgap = 12f * s;
+                float mx = (Screen.width - (names.Length * mw + (names.Length - 1) * mgap)) / 2f;
+                float my = TitleRowY + 104f * s;
+                for (int i = 0; i < names.Length; i++)
+                    buttons.Add(new Button { rect = new Rect(mx + i * (mw + mgap), my, mw, mh), label = names[i], act = acts[i], enabled = true });
                 return;
             }
 
@@ -1259,30 +1527,115 @@ namespace PointOfOrigin
             switch (phase)
             {
                 case Phase.Play:
-                    Add("Grow  [Enter]", Grow, seeds.Count > 0);
-                    Add("Skip  [N]", Skip);
-                    if (CanReveal) Add("Reveal  [V]", Reveal);
+                    Add($"Grow  [{L(GameAction.Grow)}]", Grow, seeds.Count > 0);
+                    Add($"Skip  [{L(GameAction.Skip)}]", Skip);
+                    if (CanReveal) Add($"Reveal  [{L(GameAction.Reveal)}]", Reveal);
+                    Add("Menu  [Esc]", OpenMenu);
                     break;
                 case Phase.Growing:
-                    Add("Finish  [Enter]", Primary);
-                    Add("Rewind  [R]", Rewind);
+                    Add($"Finish  [{L(GameAction.Grow)}]", Primary);
+                    Add($"Rewind  [{L(GameAction.Rewind)}]", Rewind);
                     break;
                 case Phase.Result:
                     if (!won)
                     {
-                        Add("Rewind  [R]", Rewind);
-                        Add("Skip  [N]", Skip);
-                        if (CanReveal) Add("Reveal  [V]", Reveal);
+                        Add($"Rewind  [{L(GameAction.Rewind)}]", Rewind);
+                        Add($"Skip  [{L(GameAction.Skip)}]", Skip);
+                        if (CanReveal) Add($"Reveal  [{L(GameAction.Reveal)}]", Reveal);
                     }
                     else
                     {
-                        Add("Skip to door  [N]", Skip);
+                        Add($"Skip to door  [{L(GameAction.Skip)}]", Skip);
                     }
                     break;
                 case Phase.GameOver:
                     Add("Try again  [Enter]", Retry);
                     Add("Menu  [Esc]", EnterTitle);
                     break;
+            }
+        }
+
+        void LayoutOverlay()
+        {
+            float s = S;
+            var page = PageRect();
+            float bw = 300f * s, bh = 46f * s, gap = 12f * s;
+            float cx = Screen.width / 2f;
+
+            void Wide(ref float y, string label, Action act, bool gold = false)
+            {
+                buttons.Add(new Button { rect = new Rect(cx - bw / 2f, y, bw, bh), label = label, act = act, enabled = true, gold = gold });
+                y += bh + gap;
+            }
+
+            switch (overlay)
+            {
+                case Overlay.Menu:
+                {
+                    float y = PageTop + 96f * s;
+                    Wide(ref y, "Resume  [Esc]", CloseOverlay, true);
+                    Wide(ref y, "Restart chapter", () => { CloseOverlay(); Retry(); });
+                    Wide(ref y, "Chapter select", () => { CloseOverlay(); EnterTitle(); });
+                    Wide(ref y, "Settings", () => OpenPage(Overlay.Settings));
+                    Wide(ref y, "Controls", () => OpenPage(Overlay.Controls));
+                    Wide(ref y, "Credits", () => OpenPage(Overlay.Credits));
+                    Wide(ref y, "Quit to desktop", QuitGame);
+                    break;
+                }
+                case Overlay.Settings:
+                {
+                    float y = PageTop + 80f * s;
+                    float small = 46f * s, toggle = 150f * s, rowBh = 40f * s;
+                    void Stepper(Action dec, Action inc, bool canDec, bool canInc)
+                    {
+                        buttons.Add(new Button { rect = new Rect(page.xMax - small * 2f - gap, y, small, rowBh), label = "-", act = dec, enabled = canDec });
+                        buttons.Add(new Button { rect = new Rect(page.xMax - small, y, small, rowBh), label = "+", act = inc, enabled = canInc });
+                        y += RowH;
+                    }
+                    void Toggle(string label, Action act, bool gold = false)
+                    {
+                        buttons.Add(new Button { rect = new Rect(page.xMax - toggle, y, toggle, rowBh), label = label, act = act, enabled = true, gold = gold });
+                        y += RowH;
+                    }
+                    Stepper(() => SetVolume(volume - 1), () => SetVolume(volume + 1), volume > 0, volume < VolumeSteps);
+                    Stepper(() => SetMusic(music - 1), () => SetMusic(music + 1), music > 0, music < VolumeSteps);
+                    Toggle(muted ? "Off" : "On", ToggleMute);
+                    Toggle(shakeOn ? "On" : "Off", ToggleShake);
+                    Toggle(Screen.fullScreen ? "On" : "Off", ToggleFullscreen);
+                    Toggle(confirmReset ? "Really reset?" : "Reset", ResetProgressClicked, confirmReset);
+                    y += 24f * s;
+                    Wide(ref y, "Back  [Esc]", Back);
+                    break;
+                }
+                case Overlay.Controls:
+                {
+                    float y = PageTop + 80f * s;
+                    float rowH = 42f * s, keyW = 190f * s, keyH = 36f * s;
+                    foreach (var a in InputBridge.Rebindable)
+                    {
+                        var action = a;
+                        bool waiting = listening == action;
+                        buttons.Add(new Button
+                        {
+                            rect = new Rect(page.xMax - keyW, y, keyW, keyH),
+                            label = waiting ? "press a key" : InputBridge.Label(action),
+                            act = () => { listening = waiting ? null : action; sfx.Select(); },
+                            enabled = true,
+                            gold = waiting,
+                        });
+                        y += rowH;
+                    }
+                    y += rowH + 20f * s;   // the fixed Menu row and the note sit above these
+                    buttons.Add(new Button { rect = new Rect(cx - bw - gap / 2f, y, bw, bh), label = "Reset to defaults", act = () => { InputBridge.ResetBindings(); listening = null; sfx.Rewind(); }, enabled = true });
+                    buttons.Add(new Button { rect = new Rect(cx + gap / 2f, y, bw, bh), label = "Back  [Esc]", act = Back, enabled = true });
+                    break;
+                }
+                case Overlay.Credits:
+                {
+                    float y = Screen.height - 110f * s;
+                    Wide(ref y, "Back  [Esc]", Back);
+                    break;
+                }
             }
         }
 
@@ -1323,6 +1676,94 @@ namespace PointOfOrigin
             stHint = Make(18, FontStyle.Italic, TextAnchor.LowerLeft, "b7bfd1");
             stBody = Make(20, FontStyle.Normal, TextAnchor.MiddleCenter, "b7bfd1");
             stButton = Make(19, FontStyle.Bold, TextAnchor.MiddleCenter, "e8ecf5");
+            stRow = Make(21, FontStyle.Normal, TextAnchor.MiddleLeft, "e8ecf5");
+            stRowValue = Make(17, FontStyle.Normal, TextAnchor.MiddleLeft, "8a93a8");
+        }
+
+        /// <summary>Ten segments, lit up to the value.</summary>
+        void Meter(float x, float y, int value)
+        {
+            float s = S, segW = 16f * s, segH = 16f * s, g = 4f * s;
+            for (int i = 0; i < VolumeSteps; i++)
+                Panel(new Rect(x + i * (segW + g), y, segW, segH), i < value ? new Color(0.98f, 0.85f, 0.45f, 1f) : new Color(1f, 1f, 1f, 0.12f));
+        }
+
+        void DrawOverlay()
+        {
+            float s = S;
+            var page = PageRect();
+            Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, overlay == Overlay.Menu ? 0.78f : 0.92f));
+            switch (overlay)
+            {
+                case Overlay.Menu:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "PAUSED", stBanner);
+                    string where = phase == Phase.Title ? "" : $"chapter {levelIndex + 1} of {set.levels.Length}   {level.name}   lanterns {lives}";
+                    GUI.Label(new Rect(0, PageTop + 62f * s, Screen.width, 26f * s), where, stSmallCentre);
+                    break;
+                }
+                case Overlay.Settings:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "SETTINGS", stBanner);
+                    float y = PageTop + 80f * s;
+                    float rowBh = 40f * s;
+                    void Row(string label, string value)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.42f, rowBh), label, stRow);
+                        if (value.Length > 0) GUI.Label(new Rect(page.x + page.width * 0.42f, y, page.width * 0.36f, rowBh), value, stRowValue);
+                        y += RowH;
+                    }
+                    int done = 0;
+                    for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
+                    Row("Master volume", "");
+                    Meter(page.x + page.width * 0.42f, y - RowH + 12f * s, volume);
+                    Row("Music", "");
+                    Meter(page.x + page.width * 0.42f, y - RowH + 12f * s, music);
+                    Row("Sound", muted ? "everything silent (M in game)" : "");
+                    Row("Screen shake", "on death");
+                    Row("Fullscreen", "");
+                    Row("Progress", confirmReset ? "click again to wipe it" : $"{done} of {set.levels.Length} origins found, {unlocked + 1} chapters open");
+                    break;
+                }
+                case Overlay.Controls:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "CONTROLS", stBanner);
+                    float y = PageTop + 80f * s;
+                    float rowH = 42f * s, keyH = 36f * s;
+                    foreach (var a in InputBridge.Rebindable)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.6f, keyH), InputBridge.Describe(a), stRow);
+                        y += rowH;
+                    }
+                    GUI.Label(new Rect(page.x, y, page.width * 0.6f, keyH), "Menu", stRow);
+                    GUI.Label(new Rect(page.xMax - 190f * s, y, 190f * s, keyH), "Esc, always", stRowValue);
+                    y += rowH;
+                    GUI.Label(new Rect(page.x, y, page.width, 24f * s),
+                        listening.HasValue ? "press the new key, or Esc to keep the old one" : "click a key to change it. The arrows, W and Enter always work as well.", stRowValue);
+                    break;
+                }
+                case Overlay.Credits:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "POINT OF ORIGIN", stBanner);
+                    GUI.Label(new Rect(page.x, PageTop + 70f * s, page.width, 30f * s), "made in a weekend for CPGD's World's First Game Jam, theme ORIGIN", stSmallCentre);
+                    float y = PageTop + 120f * s;
+                    void Line(string who, string what)
+                    {
+                        GUI.Label(new Rect(page.x, y, page.width * 0.4f, 34f * s), who, stRow);
+                        GUI.Label(new Rect(page.x + page.width * 0.4f, y, page.width * 0.6f, 34f * s), what, stRowValue);
+                        y += 40f * s;
+                    }
+                    Line("Design, code, levels", "Londo (Londopy)");
+                    Line("Simulation core", "Odin: the cellular automaton, shipped as origin_sim.dll");
+                    Line("Build tooling", "Nexium: bindings generator, level compiler, build orchestrator");
+                    Line("Engine", "Unity 6, driven from the command line");
+                    Line("Effects", "Houdini: ruin skylines, growth burst, stone grain");
+                    Line("Character and props", "Blender: the wanderer, the ember, the seed");
+                    Line("Sound", "synthesised at start-up, no audio files");
+                    Line("Thanks", "Cal Poly Game Development Club");
+                    break;
+                }
+            }
         }
 
         void Panel(Rect r, Color color)
@@ -1386,19 +1827,19 @@ namespace PointOfOrigin
                 else if (onSeed) sub = "you stand in your seed: move away before you grow";
                 else if (fetching && carried == 0 && seeds.Count < level.seeds) sub = pickupsLeft.Count > 0 ? "the seeds lie somewhere in the dark: find them" : "";
                 else if (attempts > 0) sub = $"attempt {attempts + 1}";
-                else sub = "find where it began, stand there, press E";
+                else sub = $"find where it began, stand there, press {L(GameAction.Plant)}";
                 sub += $"   lanterns {lives}";
                 GUI.Label(new Rect(Screen.width * 0.4f - 24f * s, 54f * s, Screen.width * 0.6f, 30f * s), sub, stSmallRight);
 
                 string hint = attempts > 0 && !string.IsNullOrEmpty(level.tip) ? "Tip: " + level.tip : level.hint;
-                float buttonsWidth = buttons.Count * 180f * s + 40f * s;
+                float buttonsWidth = (Paused ? 3 : buttons.Count) * 180f * s + 40f * s;
                 GUI.Label(new Rect(24f * s, Screen.height - 120f * s, Screen.width - buttonsWidth - 48f * s, 88f * s), hint, stHint);
 
                 GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
-                    (muted ? "sound off   " : "") + "A D move   Space jump   E plant   Enter grow   R rewind   N skip   M sound   Esc menu", stSmallCentre);
+                    (muted ? "sound off   " : "") +
+                    $"{L(GameAction.Left)} {L(GameAction.Right)} move   {L(GameAction.Jump)} jump   {L(GameAction.Plant)} plant   {L(GameAction.Grow)} grow   " +
+                    $"{L(GameAction.Rewind)} rewind   {L(GameAction.Skip)} skip   {L(GameAction.Mute)} sound   Esc menu", stSmallCentre);
             }
-
-            DrawButtons(gui);
 
             switch (phase)
             {
@@ -1414,12 +1855,12 @@ namespace PointOfOrigin
                         "Plant a seed there, get clear, and grow it back: the growth is the ground that carries you to the door.", stBody);
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
-                    GUI.Label(new Rect(0, Screen.height * 0.74f - 30f * s, Screen.width, 24f * s),
+                    GUI.Label(new Rect(0, TitleRowY - 30f * s, Screen.width, 24f * s),
                         done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)", stSmallCentre);
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
                     var old = GUI.color;
                     GUI.color = new Color(1f, 1f, 1f, pulse);
-                    GUI.Label(new Rect(0, Screen.height * 0.74f + 62f * s, Screen.width, 40f * s),
+                    GUI.Label(new Rect(0, TitleRowY + 54f * s, Screen.width, 40f * s),
                         done == 0 ? "click or press Enter to begin" : "click or press Enter to continue", stBody);
                     GUI.color = old;
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
@@ -1484,7 +1925,7 @@ namespace PointOfOrigin
                     }
                     string detail = won
                         ? (attempts == 1 ? "first try" : $"on attempt {attempts}") + "   -   the door is open: walk to it"
-                        : $"{missing} missing, {extra} astray   -   R to rewind, then move your seeds";
+                        : $"{missing} missing, {extra} astray   -   {L(GameAction.Rewind)} to rewind, then move your seeds";
                     GUI.Label(new Rect(0, ly, Screen.width, 40f * s), detail, stSmallCentre);
                     GUI.color = old;
                     break;
@@ -1503,6 +1944,9 @@ namespace PointOfOrigin
                     break;
                 }
             }
+
+            if (Paused) DrawOverlay();
+            DrawButtons(gui);
         }
     }
 }
