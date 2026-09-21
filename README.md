@@ -37,7 +37,9 @@ a bloom is quenched until the next rewind. You carry three lanterns per
 chapter; lose them all and the dark takes you, then you try again. Ten
 chapters across four laws.
 
-![First Bloom, the growth rising](docs/screenshots/03_growing.png)
+![Point of Origin](docs/social-preview.png)
+
+![The first chapter walks you through the loop](docs/screenshots/02_tutorial.png)
 
 ## Three languages, one game
 

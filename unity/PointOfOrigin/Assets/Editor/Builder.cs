@@ -13,18 +13,32 @@ namespace PointOfOrigin.EditorTools
     public static class Builder
     {
         const string Output = "Build/Windows/PointOfOrigin.exe";
+        const string Version = "1.0.0";
+        const string IconPath = "Assets/Icon/icon.png";
 
         [MenuItem("Point of Origin/Build Windows (x64)")]
         public static void PerformBuild()
         {
             PlayerSettings.productName = "Point of Origin";
             PlayerSettings.companyName = "Londopy";
+            PlayerSettings.bundleVersion = Version;
             PlayerSettings.defaultScreenWidth = 1280;
             PlayerSettings.defaultScreenHeight = 800;
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
             PlayerSettings.resizableWindow = true;
             PlayerSettings.runInBackground = true;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
+
+            // the exe icon: one texture for every size Windows asks for
+            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(IconPath);
+            if (icon != null)
+            {
+                var sizes = PlayerSettings.GetIconSizes(NamedBuildTarget.Standalone, IconKind.Application);
+                var icons = new Texture2D[sizes.Length];
+                for (int i = 0; i < icons.Length; i++) icons[i] = icon;
+                PlayerSettings.SetIcons(NamedBuildTarget.Standalone, icons, IconKind.Application);
+            }
+            else Debug.LogWarning($"Point of Origin build: no icon at {IconPath}, the player keeps the default one");
 
             var options = new BuildPlayerOptions
             {

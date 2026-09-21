@@ -2165,7 +2165,7 @@ namespace PointOfOrigin
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width - 48f * s, 30f * s),
                         "made for CPGD's World's First Game Jam, theme ORIGIN   |   Odin + Nexium + Unity + Houdini", stSmallRight);
                     GUI.Label(new Rect(24f * s, Screen.height - 60f * s, Screen.width * 0.5f, 30f * s),
-                        (muted ? "sound off (M)" : "M sound") + "   Esc quit", stSmall);
+                        (muted ? "sound off (M)" : "M sound") + "   Esc quit   v" + Application.version, stSmall);
                     break;
                 }
                 case Phase.Story:
