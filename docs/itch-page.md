@@ -48,6 +48,8 @@ baked to text and replayed by the game) and Blender (the wanderer, the ember
 and the seed, rendered flat-shaded). Made solo for CPGD's World's First Game
 Jam, theme ORIGIN. Windows, 64-bit.
 
+**Source:** https://github.com/Londopy/point-of-origin
+
 **Upload:** `dist/PointOfOrigin-win64.zip` (the `Build/Windows` folder without
 `PointOfOrigin_BackUpThisFolder_ButDontShipItWithYourGame`), marked as a
 Windows executable. Cover image: `docs/cover.png` (630x500).
