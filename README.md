@@ -20,6 +20,8 @@
 
 *You are shown how it ended. Find where it began.*
 
+### ▶ [Play it in your browser or download it on itch.io](https://londopy.itch.io/point-of-origin)
+
 A side-scrolling platformer built on a reverse cellular-automaton puzzle,
 made for the Cal Poly Game Development Club's **World's First Game Jam**
 (September 2026, theme **ORIGIN**). You wake in the dark among the ruins of
