@@ -2946,6 +2946,11 @@ namespace PointOfOrigin
             float s = S;
             var page = PageRect();
             Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, overlay == Overlay.Menu ? 0.78f : 0.92f));
+            // a framed card behind the page: banner sits a little above it, buttons a little below
+            float cardX = page.x - 44f * s, cardW = page.width + 88f * s;
+            float cardTop = PageTop + 44f * s, cardBot = Screen.height - 54f * s;
+            Round(new Rect(cardX, cardTop + 6f * s, cardW, cardBot - cardTop), new Color(0f, 0f, 0f, 0.4f), 22f * s);
+            Card(new Rect(cardX, cardTop, cardW, cardBot - cardTop), new Color(0.09f, 0.11f, 0.16f, 0.92f), new Color(1f, 1f, 1f, 0.08f), 22f * s, 1.5f * s);
             switch (overlay)
             {
                 case Overlay.Menu:
@@ -3167,19 +3172,52 @@ namespace PointOfOrigin
             GUI.color = old;
         }
 
+        /// <summary>A filled rounded rectangle, corners in pixels, drawn on the GPU by the DrawTexture border overload.</summary>
+        void Round(Rect r, Color color, float radius)
+        {
+            radius = Mathf.Max(0f, Mathf.Min(radius, Mathf.Min(r.width, r.height) * 0.5f));
+            GUI.DrawTexture(r, panelTex, ScaleMode.StretchToFill, true, 0f, color, Vector4.zero, new Vector4(radius, radius, radius, radius));
+        }
+
+        /// <summary>A rounded card with a border: draw the border colour, then the fill inset by the border width.</summary>
+        void Card(Rect r, Color fill, Color border, float radius, float borderW)
+        {
+            Round(r, border, radius);
+            Round(new Rect(r.x + borderW, r.y + borderW, r.width - 2f * borderW, r.height - 2f * borderW), fill, radius - borderW);
+        }
+
+        readonly List<float> btnHover = new List<float>();   // per-button hover, eased toward 1 while pointed at
+
         void DrawButtons(Vector2 gui)
         {
+            float s = S;
+            while (btnHover.Count < buttons.Count) btnHover.Add(0f);
+            float dt = Time.unscaledDeltaTime;
             for (int bi = 0; bi < buttons.Count; bi++)
             {
                 var b = buttons[bi];
                 bool hot = b.enabled && (b.rect.Contains(gui) || bi == padFocus);
-                Color back = !b.enabled ? new Color(0.10f, 0.11f, 0.15f, 0.6f)
-                    : hot ? new Color(0.30f, 0.36f, 0.48f, 0.95f)
-                    : b.gold ? new Color(0.30f, 0.26f, 0.14f, 0.92f)
-                    : new Color(0.18f, 0.21f, 0.29f, 0.92f);
-                Panel(b.rect, back);
+                float h = btnHover[bi] = Mathf.MoveTowards(btnHover[bi], hot ? 1f : 0f, dt * 9f);
+                float radius = 10f * s;
+
+                // a soft drop shadow lifts the button off the page
+                Round(new Rect(b.rect.x, b.rect.y + 3f * s, b.rect.width, b.rect.height), new Color(0f, 0f, 0f, 0.35f * (b.enabled ? 1f : 0.4f)), radius);
+
+                Color fillBase = !b.enabled ? new Color(0.11f, 0.12f, 0.16f, 0.7f)
+                    : b.gold ? new Color(0.24f, 0.20f, 0.10f, 0.96f)
+                    : new Color(0.15f, 0.18f, 0.25f, 0.96f);
+                Color fillHot = b.gold ? new Color(0.44f, 0.35f, 0.16f, 1f) : new Color(0.27f, 0.33f, 0.45f, 1f);
+                Color fill = Color.Lerp(fillBase, fillHot, h);
+                Color border = !b.enabled ? new Color(1f, 1f, 1f, 0.05f)
+                    : b.gold ? Color.Lerp(new Color(0.52f, 0.42f, 0.20f, 0.85f), new Color(1f, 0.83f, 0.42f, 1f), h)
+                    : Color.Lerp(new Color(1f, 1f, 1f, 0.10f), new Color(0.62f, 0.74f, 0.98f, 0.95f), h);
+                float bw = (1f + 1.2f * h) * s;
+                Card(b.rect, fill, border, radius, bw);
+
                 var old = GUI.color;
-                GUI.color = !b.enabled ? new Color(1f, 1f, 1f, 0.3f) : b.gold ? new Color(1f, 0.85f, 0.45f, 1f) : Color.white;
+                GUI.color = !b.enabled ? new Color(1f, 1f, 1f, 0.3f)
+                    : b.gold ? Color.Lerp(new Color(1f, 0.85f, 0.45f, 1f), Color.white, 0.4f * h)
+                    : Color.white;
                 GUI.Label(b.rect, b.label, stButton);
                 GUI.color = old;
             }
