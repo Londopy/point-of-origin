@@ -162,6 +162,13 @@ allowed; shipping late is not.
       breath, the cancelling echoes again, an eight-tile crumbling bridge over
       acid, a hunter before the door. Finishing it ends the game as chapter
       ten does; the HUD reads "11 / 10".
+- [x] (Monday 5:40 PM, Londo's last asks) **the lantern's riddle**: skipping is
+      no longer a HUD button; N or "Hint or skip" in the pause menu opens a
+      one-row origin riddle (bloom, spark, fused slab, cut echo: which cell did
+      it begin on?), typed or stepped; solved once per chapter, it offers
+      "Show the origins" and "Skip the chapter". Two Echoes' tunnel has two
+      vents; Afterlight has a shore vent, a second hunter, a third vent and
+      spikes after the bridge. Both zips rebuilt and re-attached to v1.0.
 - [ ] **publish, the itch half** (Londo): the page from `docs/itch-page.md`,
       both zips, submit to the jam.
 - [ ] 4:30 to 5:00 pm: confirm the submission shows on the jam page and the
