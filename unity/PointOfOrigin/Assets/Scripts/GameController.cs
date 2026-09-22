@@ -1105,7 +1105,7 @@ namespace PointOfOrigin
                 if (primary) Primary();
                 if (InputBridge.Pressed(GameAction.Plant) && phase == Phase.Play) PlantHere();
                 if (InputBridge.Pressed(GameAction.Rewind) && InWorld) Rewind();
-                if (InputBridge.Pressed(GameAction.Skip) && (phase == Phase.Play || phase == Phase.Result)) OpenRiddle();
+                if (InputBridge.Pressed(GameAction.Skip) && (phase == Phase.Play || (phase == Phase.Result && !won))) OpenRiddle();
                 if (InputBridge.Pressed(GameAction.Reveal) && CanReveal) Reveal();
                 if (InputBridge.Pressed(GameAction.Mute)) ToggleMute();
                 if (InputBridge.Pressed(GameAction.Menu))
@@ -2717,10 +2717,7 @@ namespace PointOfOrigin
                         Add($"Rewind  [{L(GameAction.Rewind)}]", Rewind);
                         Add(RevealLabel(), Reveal, CanReveal);
                     }
-                    else
-                    {
-                        Add($"Skip to door  [{L(GameAction.Skip)}]", Skip);
-                    }
+                    // won: no button at all; the door is open and the walk to it is the player's
                     break;
                 case Phase.GameOver:
                     Add("Try again  [Enter]", Retry);
@@ -2830,7 +2827,7 @@ namespace PointOfOrigin
                     else
                     {
                         float bw4 = 200f * s;
-                        bool inPlay = phase == Phase.Play || phase == Phase.Result;
+                        bool inPlay = phase == Phase.Play || (phase == Phase.Result && !won);   // once the door is open, the walk is yours
                         buttons.Add(new Button { rect = new Rect(cx - bw4 * 1.5f - gap, y, bw4, bh), label = revealed ? "Origins shown" : "Show the origins", act = () => { CloseOverlay(); if (!revealed) Reveal(); }, enabled = inPlay && !revealed, gold = true });
                         buttons.Add(new Button { rect = new Rect(cx - bw4 / 2f, y, bw4, bh), label = "Skip the chapter", act = () => { CloseOverlay(); Skip(); }, enabled = inPlay });
                         buttons.Add(new Button { rect = new Rect(cx + bw4 / 2f + gap, y, bw4, bh), label = "Back  [Esc]", act = Back, enabled = true });

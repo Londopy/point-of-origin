@@ -13,7 +13,7 @@ namespace PointOfOrigin.EditorTools
     public static class Builder
     {
         const string Output = "Build/Windows/PointOfOrigin.exe";
-        const string Version = "1.0.0";
+        const string Version = "1.1.0";
         const string IconPath = "Assets/Icon/icon.png";
 
         [MenuItem("Point of Origin/Build Windows (x64)")]

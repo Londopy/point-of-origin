@@ -1,4 +1,4 @@
-# Point of Origin v1.0
+# Point of Origin v1.1
 
 Made in a weekend for the Cal Poly Game Development Club's World's First Game
 Jam, theme **ORIGIN**.
@@ -43,6 +43,8 @@ lantern's riddle (solve it for a hint or a skip), V reveal (after two failed
 tries), M sound, Esc menu. Every key except Esc
 can be rebound on the Controls page. Gamepads work: stick or d-pad, A jump,
 X plant, B grow, Y rewind, LB reveal, RB skip, Start menu.
+
+**Since v1.0.** Eleven chapters (the last one hidden until all ten origins are found), the lantern's riddle in place of a skip button, and the walk to every open door is yours: nothing skips it.
 
 **Downloads.** `PointOfOrigin-win64.zip`: Windows, 64-bit; unzip and run
 `PointOfOrigin.exe`. `PointOfOrigin-webgl.zip`: the browser build, as
