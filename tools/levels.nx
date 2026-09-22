@@ -33,6 +33,7 @@ struct Level {
     rule: String
     steps: i64
     seeds: i64
+    hidden: bool                       // `hidden`: not on the chapter select until every other origin is found
     rows: List(String)
     origins: List((i64, i64))
     pickups: List((i64, i64))
@@ -56,7 +57,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
     var lv = Level{
         .name = String.new(), .hint = String.new(), .tip = String.new(), .intro = String.new(), .outro = String.new(), .rule = String.from("B3/S23"),
         .steps = 4, .seeds = 0, .rows = List(String).new(), .origins = List((i64, i64)).new(),
-        .pickups = List((i64, i64)).new(), .embers = List((i64, i64, i64)).new(),
+        .pickups = List((i64, i64)).new(), .embers = List((i64, i64, i64)).new(), .hidden = false,
         .acid = List((i64, i64)).new(), .spikes = List((i64, i64)).new(), .spouts = List((i64, i64)).new(), .crumble = List((i64, i64)).new(),
         .says = List((String, String)).new(), .secret = (0, 0), .has_secret = false,
         .start = (0, 0), .has_start = false, .exit = (0, 0), .has_exit = false, .w = 0, .h = 0,
@@ -83,6 +84,7 @@ fn parse_level(text: []u8, path: []u8) -> !Level {
         else if key == "rule" { lv.rule = String.from(val) }
         else if key == "steps" { lv.steps = try val.parse_int(i64) }
         else if key == "seeds" { lv.seeds = try val.parse_int(i64) }
+        else if key == "hidden" { lv.hidden = true }
         else if key == "say" {
             // say wake|The lantern's line.
             let parts = strings.split_once(val, "|") orelse {
@@ -344,6 +346,7 @@ fn main() -> u8 {
         json.set(&mut obj, "survive", json.number(num_of(&grown, "survive")))
         json.set(&mut obj, "steps", json.number(lv.steps as f64))
         json.set(&mut obj, "seeds", json.number(lv.seeds as f64))
+        json.set(&mut obj, "hidden", json.number(if lv.hidden { 1.0 } else { 0.0 }))
         json.set(&mut obj, "rock", json.string(rock_flat[..]))
         json.set(&mut obj, "target", json.string(target))
         json.set(&mut obj, "origins", json.string(seeds[..]))

@@ -1010,9 +1010,9 @@ namespace PointOfOrigin
 
         int FirstUnsolved()
         {
-            for (int i = 0; i < set.levels.Length; i++)
+            for (int i = 0; i < MainCount; i++)
                 if (i <= unlocked && !Solved(i)) return i;
-            return Mathf.Min(unlocked, set.levels.Length - 1);
+            return Mathf.Min(unlocked, MainCount - 1);
         }
 
         /// <summary>The chapter the title replays: the last solved one whose map is short enough to sit under the text.</summary>
@@ -1200,7 +1200,7 @@ namespace PointOfOrigin
                     if (rock[i] != Sim.Rock && !seen[i]) every = false;
                 if (every) Achievements.Unlock("corners");
             }
-            int all = (1 << set.levels.Length) - 1;
+            int all = (1 << MainCount) - 1;
             if ((solvedMask & all) == all)
             {
                 Achievements.Unlock("every_origin");
@@ -1964,7 +1964,7 @@ namespace PointOfOrigin
 
         void Next()
         {
-            if (levelIndex + 1 >= set.levels.Length)
+            if (levelIndex + 1 >= MainCount)   // the road ends after the last open chapter; the hidden one ends it too
             {
                 phase = Phase.Finished;
                 return;
@@ -2154,6 +2154,34 @@ namespace PointOfOrigin
                 if (Look.Open(Look.Lanterns[lookLantern], found, secret)) { Look.Lantern = lookLantern; ApplyLook(); sfx.Select(); } else sfx.Blocked();
             }
         }
+
+        // ------------------------------------------------------------------ the chapter past the last
+
+        /// <summary>The chapters on the road: every level except the hidden ones at the end of the list.</summary>
+        int MainCount
+        {
+            get
+            {
+                if (set?.levels == null) return 0;
+                int n = set.levels.Length;
+                while (n > 0 && set.levels[n - 1].hidden != 0) n--;
+                return n;
+            }
+        }
+
+        /// <summary>What the chapter select shows: the road, and past it the hidden chapters once every origin on the road is found.</summary>
+        int VisibleCount
+        {
+            get
+            {
+                int main = MainCount;
+                for (int i = 0; i < main; i++) if (!Solved(i)) return main;
+                return set.levels.Length;
+            }
+        }
+
+        /// <summary>"03 / 10" on the road; the hidden chapter reads "11 / 10", past the count.</summary>
+        string ChapterTag => $"{levelIndex + 1:00} / {MainCount:00}";
 
         // ------------------------------------------------------------------ deaths per chapter
 
@@ -2541,7 +2569,7 @@ namespace PointOfOrigin
 
             if (phase == Phase.Title)
             {
-                int n = set.levels.Length;
+                int n = VisibleCount;
                 float b = 44f * s, gap = 10f * s;
                 float total = n * b + (n - 1) * gap;
                 float x0 = (Screen.width - total) / 2f;
@@ -2813,7 +2841,7 @@ namespace PointOfOrigin
                 case Overlay.Menu:
                 {
                     GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "PAUSED", stBanner);
-                    string where = phase == Phase.Title ? "" : $"chapter {levelIndex + 1} of {set.levels.Length}   {level.name}   lanterns {lives}";
+                    string where = phase == Phase.Title ? "" : $"chapter {ChapterTag}   {level.name}   lanterns {lives}";
                     GUI.Label(new Rect(0, PageTop + 62f * s, Screen.width, 26f * s), where, stSmallCentre);
                     break;
                 }
@@ -2837,7 +2865,7 @@ namespace PointOfOrigin
                     Row("Sound", muted ? "everything silent (M in game)" : "");
                     Row("Screen shake", "on death");
                     Row("Fullscreen", "");
-                    Row("Progress", confirmReset ? "click again to wipe it" : $"{done} of {set.levels.Length} origins found, {unlocked + 1} chapters open");
+                    Row("Progress", confirmReset ? "click again to wipe it" : $"{done} of {MainCount} origins found, {Mathf.Min(unlocked + 1, VisibleCount)} chapters open");
                     break;
                 }
                 case Overlay.Controls:
@@ -2954,7 +2982,7 @@ namespace PointOfOrigin
                     Row("Lantern", Look.Lanterns[lookLantern]);
                     y += 12f * s;
                     GUI.Label(new Rect(page.x, y, page.width * 0.62f, 72f * s),
-                        $"{found} of {set.levels.Length} origins found. More cloth, hats and lights open as you find them, and one light is only for whoever finds where the road does not lead. Saved with your progress.", stRowValue);
+                        $"{found} of {MainCount} origins found. More cloth, hats and lights open as you find them, and one light is only for whoever finds where the road does not lead. Saved with your progress.", stRowValue);
                     break;
                 }
                 case Overlay.Achievements:
@@ -3044,7 +3072,7 @@ namespace PointOfOrigin
             if (phase != Phase.Title && phase != Phase.Finished && phase != Phase.Story && phase != Phase.GameOver)
             {
                 GUI.Label(new Rect(24f * s, 16f * s, Screen.width * 0.6f, 40f * s),
-                    $"{levelIndex + 1:00} / {set.levels.Length:00}    {level.name}", stH1);
+                    $"{ChapterTag}    {level.name}", stH1);
                 GUI.Label(new Rect(24f * s, 54f * s, Screen.width * 0.55f, 48f * s),
                     $"{lawText}   ({level.rule}, {level.steps} generation{(level.steps == 1 ? "" : "s")})", stSmall);
 
@@ -3101,10 +3129,10 @@ namespace PointOfOrigin
                     int done = 0;
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(0, TitleRowY - 30f * s, Screen.width, 24f * s),
-                        (done == 0 ? "chapters" : $"chapters   ({done} of {set.levels.Length} found)") + (PlayerPrefs.GetInt(KeySecret, 0) != 0 ? "   ·   the first seed is yours" : ""), stSmallCentre);
+                        (done == 0 ? "chapters" : $"chapters   ({done} of {MainCount} found)") + (PlayerPrefs.GetInt(KeySecret, 0) != 0 ? "   ·   the first seed is yours" : "") + (VisibleCount > MainCount ? "   ·   the road goes on" : ""), stSmallCentre);
                     {
                         // how many lanterns each chapter has taken, under its button; nothing until it has taken one
-                        int n = set.levels.Length; float b = 44f * s, cg = 10f * s;
+                        int n = VisibleCount; float b = 44f * s, cg = 10f * s;
                         float x0 = (Screen.width - (n * b + (n - 1) * cg)) / 2f;
                         for (int i = 0; i < n; i++)
                         {
@@ -3128,7 +3156,7 @@ namespace PointOfOrigin
                 {
                     Panel(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.07f, 0.82f));
                     float cy = Screen.height * 0.30f;
-                    GUI.Label(new Rect(0, cy - 40f * s, Screen.width, 26f * s), $"chapter {levelIndex + 1} of {set.levels.Length}", stSmallCentre);
+                    GUI.Label(new Rect(0, cy - 40f * s, Screen.width, 26f * s), level.hidden != 0 ? "the chapter past the last" : $"chapter {levelIndex + 1} of {MainCount}", stSmallCentre);
                     GUI.Label(new Rect(0, cy - 10f * s, Screen.width, 76f * s), level.name, stBanner);
                     GUI.Label(new Rect(Screen.width * 0.2f, cy + 76f * s, Screen.width * 0.6f, 160f * s), level.intro, stBody);
                     float pulse = 0.55f + 0.45f * Mathf.Sin(Time.time * 3f);
@@ -3195,7 +3223,7 @@ namespace PointOfOrigin
                     for (int i = 0; i < set.levels.Length; i++) if (Solved(i)) done++;
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 50f * s, Screen.width * 0.7f, 90f * s), Epilogue, stBody);
                     GUI.Label(new Rect(Screen.width * 0.15f, cy + 150f * s, Screen.width * 0.7f, 40f * s),
-                        $"{done} of {set.levels.Length} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stSmallCentre);
+                        $"{done} of {MainCount} origins found" + (skipped > 0 ? $", {skipped} skipped this run." : "."), stSmallCentre);
                     GUI.Label(new Rect(0, Screen.height - 150f * s, Screen.width, 40f * s), "click or press Enter for the menu", stBody);
                     break;
                 }

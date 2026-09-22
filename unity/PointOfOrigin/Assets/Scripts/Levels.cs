@@ -21,6 +21,7 @@ namespace PointOfOrigin
         public int survive;
         public int steps;
         public int seeds;
+        public int hidden;      // 1: not on the chapter select until every other origin is found
         public int solutions;   // seed placements that grow the target; -1 when not counted
         public string rock;     // w*h chars, '#' rock
         public string target;   // w*h chars, '#' alive

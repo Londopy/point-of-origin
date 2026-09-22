@@ -13,7 +13,8 @@ chapter asks a different question: two blooms fused into one slab, three
 sparks whose rings merged, a coral in the shadow of a post, echoes cut short
 by cliffs or bent around rock, two echoes that cancelled each other, a mesa
 grown against a wall. The first chapter walks you through the loop, wrong
-turn included.
+turn included. Find all ten origins and there is one chapter more, with
+nothing new to deduce and everything to survive.
 
 **It can go wrong.** Growth overgrows whoever stands inside it. The void takes
 whoever falls. Acid pools and spikes take the careless, vents breathe fire on

@@ -109,6 +109,9 @@ found, all ten without a Reveal, all ten, dying every way once, and one that
 is only ??? until you earn it. Somewhere in the ruins there is a place the
 road does not lead to; finding it changes the lantern's light for good.
 
+Find all ten origins and the chapter select grows an eleventh button: a
+chapter past the last, with nothing new to deduce and everything to survive.
+
 That place has a wall. What is written on it was taken once by the spark law,
 and the key beside it shows what that law does to lettering. Read the word
 back and say it, and you can press your own initials, up to three letters,

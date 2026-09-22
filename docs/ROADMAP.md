@@ -154,6 +154,14 @@ allowed; shipping late is not.
 - [x] (Monday 4:35 PM) **publish, the GitHub half**: final builds of both
       players (4:29 PM zips), tag `v1.0`, the release drafted by the workflow
       with both zips attached and the release notes as its body.
+- [x] (Monday 5:00 PM, Londo's ask) **the chapter past the last**: Afterlight,
+      `11_afterlight.origin`, marked `hidden` (a new level key; the compiler
+      writes `hidden: 1` and the game keeps hidden chapters off the select
+      until every origin on the road is found). A lake on falling stones, a
+      shaft an ember climbs, a road of vents with a hunter, a seed in a vent's
+      breath, the cancelling echoes again, an eight-tile crumbling bridge over
+      acid, a hunter before the door. Finishing it ends the game as chapter
+      ten does; the HUD reads "11 / 10".
 - [ ] **publish, the itch half** (Londo): the page from `docs/itch-page.md`,
       both zips, submit to the jam.
 - [ ] 4:30 to 5:00 pm: confirm the submission shows on the jam page and the

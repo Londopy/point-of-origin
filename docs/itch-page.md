@@ -36,7 +36,7 @@ failed attempt if you want one. Eleven achievements, one of them hidden:
 somewhere there is a place the road does not lead to, and on its wall a word
 the spark law took once. Read it back and you can press your initials into
 the rock for everyone who plays after you (that part goes through GitHub, so
-it takes an account).
+it takes an account). Find all ten origins and there is one chapter more.
 
 **Controls** (rebindable on the Controls page; arrows, W and Enter always work):
 
