@@ -17,7 +17,7 @@ namespace PointOfOrigin
         enum Phase { Title, Story, Play, Growing, Result, Dead, GameOver, Finished }
 
         /// <summary>A page drawn over whatever phase is running; the world pauses while one is open.</summary>
-        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits, Wall, Wanderer }
+        enum Overlay { None, Menu, Help, Achievements, Settings, Controls, Credits, Wall, Wanderer, Riddle }
 
         /// <summary>
         /// The first chapter walks the player through the loop, one prompt at a time, keyed to what they
@@ -1072,10 +1072,11 @@ namespace PointOfOrigin
 
             if (Paused)
             {
-                if (overlay == Overlay.Wall)
+                if (overlay == Overlay.Wall || overlay == Overlay.Riddle)
                 {
                     if (InputBridge.Pressed(GameAction.Menu)) Back();
-                    else WallTyping();
+                    else if (overlay == Overlay.Wall) WallTyping();
+                    else RiddleTyping();
                 }
                 else if (listening.HasValue)
                 {
@@ -1104,7 +1105,7 @@ namespace PointOfOrigin
                 if (primary) Primary();
                 if (InputBridge.Pressed(GameAction.Plant) && phase == Phase.Play) PlantHere();
                 if (InputBridge.Pressed(GameAction.Rewind) && InWorld) Rewind();
-                if (InputBridge.Pressed(GameAction.Skip) && (phase == Phase.Play || phase == Phase.Result)) Skip();
+                if (InputBridge.Pressed(GameAction.Skip) && (phase == Phase.Play || phase == Phase.Result)) OpenRiddle();
                 if (InputBridge.Pressed(GameAction.Reveal) && CanReveal) Reveal();
                 if (InputBridge.Pressed(GameAction.Mute)) ToggleMute();
                 if (InputBridge.Pressed(GameAction.Menu))
@@ -2155,6 +2156,97 @@ namespace PointOfOrigin
             }
         }
 
+        // ------------------------------------------------------------------ the lantern's riddle: help costs one
+
+        bool riddleSolved;
+        int riddleLevel = -1;
+        string riddleText = "";
+        int riddleAnswer, riddleGuess, riddleTries;
+        bool riddleTyped;
+        string riddleNote = "";
+
+        bool RiddleOpenFor => riddleSolved && riddleLevel == levelIndex;
+
+        /// <summary>A one-row origin puzzle in the game's own terms: where did the shape begin? Cells are numbered along the row.</summary>
+        void MakeRiddle()
+        {
+            var rng = new System.Random(levelIndex * 131 + riddleTries * 17 + Environment.TickCount);
+            int a = 10 + rng.Next(30);
+            switch (rng.Next(4))
+            {
+                case 0:
+                {
+                    int n = 2 + rng.Next(3);
+                    riddleText = $"A bloom grew from one seed for {n} generations, one cell further each way every generation. Its outline runs from cell {a} to cell {a + 2 * n}. Which cell was the seed on?";
+                    riddleAnswer = a + n;
+                    break;
+                }
+                case 1:
+                    riddleText = $"A spark leaves a ring one cell each way and dies in the middle. On this row the ring's two cells are {a} and {a + 2}. Which cell was the spark on?";
+                    riddleAnswer = a + 1;
+                    break;
+                case 2:
+                    riddleText = $"Two blooms three cells apart grew for two generations and fused into one slab, from cell {a} to cell {a + 7}. Which cell did the left one begin on?";
+                    riddleAnswer = a + 2;
+                    break;
+                default:
+                    riddleText = $"An echo grew for three generations, three cells each way, and a cliff cut its right side short: what is left runs from cell {a} to cell {a + 4}, and the cliff stands at {a + 5}. Which cell did it begin on?";
+                    riddleAnswer = a + 3;
+                    break;
+            }
+            riddleGuess = a;
+            riddleTyped = false;
+            riddleNote = "";
+        }
+
+        void OpenRiddle()
+        {
+            if (riddleLevel != levelIndex)
+            {
+                riddleSolved = false;
+                riddleLevel = levelIndex;
+                riddleTries = 0;
+                MakeRiddle();
+            }
+            OpenPage(Overlay.Riddle);
+        }
+
+        void RiddleAnswer()
+        {
+            if (RiddleOpenFor) return;
+            if (riddleGuess == riddleAnswer)
+            {
+                riddleSolved = true;
+                riddleNote = "That is the cell. The lantern owes you one.";
+                sfx.Success();
+            }
+            else
+            {
+                riddleTries++;
+                sfx.Blocked();
+                if (riddleTries % 3 == 0) { MakeRiddle(); riddleNote = "Not that cell. Another riddle, then."; }
+                else riddleNote = "Not that cell.";
+            }
+        }
+
+        /// <summary>Digits type the cell, the arrows step it, Backspace clears, Enter says it.</summary>
+        void RiddleTyping()
+        {
+            if (RiddleOpenFor) return;
+            if (!InputBridge.AnyKeyPressed(out var key)) return;
+            if (key == Key.Enter || key == Key.NumpadEnter) { RiddleAnswer(); return; }
+            if (key == Key.Backspace) { riddleGuess /= 10; riddleTyped = true; return; }
+            if (key == Key.LeftArrow) { riddleGuess = Mathf.Max(0, riddleGuess - 1); return; }
+            if (key == Key.RightArrow) { riddleGuess++; return; }
+            string name = key.ToString();
+            char c = '\0';
+            if (name.StartsWith("Digit") && name.Length == 6) c = name[5];
+            else if (name.StartsWith("Numpad") && name.Length == 7 && char.IsDigit(name[6])) c = name[6];
+            if (c == '\0') return;
+            if (!riddleTyped) { riddleGuess = 0; riddleTyped = true; }   // the first digit replaces the suggestion
+            if (riddleGuess < 1000) { riddleGuess = riddleGuess * 10 + (c - '0'); sfx.Select(); }
+        }
+
         // ------------------------------------------------------------------ the chapter past the last
 
         /// <summary>The chapters on the road: every level except the hidden ones at the end of the list.</summary>
@@ -2612,7 +2704,6 @@ namespace PointOfOrigin
             {
                 case Phase.Play:
                     Add($"Grow  [{L(GameAction.Grow)}]", Grow, seeds.Count > 0);
-                    Add($"Skip  [{L(GameAction.Skip)}]", Skip);
                     Add(RevealLabel(), Reveal, CanReveal);
                     Add("Menu  [Esc]", OpenMenu);
                     break;
@@ -2624,7 +2715,6 @@ namespace PointOfOrigin
                     if (!won)
                     {
                         Add($"Rewind  [{L(GameAction.Rewind)}]", Rewind);
-                        Add($"Skip  [{L(GameAction.Skip)}]", Skip);
                         Add(RevealLabel(), Reveal, CanReveal);
                     }
                     else
@@ -2660,6 +2750,7 @@ namespace PointOfOrigin
                     Wide(ref y, "Resume  [Esc]", CloseOverlay, true);
                     Wide(ref y, "Restart chapter", () => { CloseOverlay(); Retry(); });
                     Wide(ref y, "Chapter select", () => { CloseOverlay(); EnterTitle(); });
+                    Wide(ref y, RiddleOpenFor ? "Hint or skip" : "Hint or skip  (a riddle first)", OpenRiddle);
                     Wide(ref y, "How to play", () => OpenPage(Overlay.Help));
                     Wide(ref y, "Achievements", () => OpenPage(Overlay.Achievements));
                     Wide(ref y, "Settings", () => OpenPage(Overlay.Settings));
@@ -2722,6 +2813,28 @@ namespace PointOfOrigin
                 {
                     float y = Screen.height - 110f * s;
                     Wide(ref y, "Back  [Esc]", Back);
+                    break;
+                }
+                case Overlay.Riddle:
+                {
+                    float y = Screen.height - 110f * s;
+                    float bw3 = 220f * s, small = 46f * s, rowBh = 40f * s;
+                    if (!RiddleOpenFor)
+                    {
+                        float gy = PageTop + 76f * s + 34f * s + 108f * s;   // the answer row
+                        buttons.Add(new Button { rect = new Rect(page.x + page.width * 0.52f, gy, small, rowBh), label = "<", act = () => riddleGuess = Mathf.Max(0, riddleGuess - 1), enabled = true });
+                        buttons.Add(new Button { rect = new Rect(page.x + page.width * 0.52f + small + gap, gy, small, rowBh), label = ">", act = () => riddleGuess++, enabled = true });
+                        buttons.Add(new Button { rect = new Rect(cx - bw3 - gap / 2f, y, bw3, bh), label = "Say it  [Enter]", act = RiddleAnswer, enabled = true, gold = true });
+                        buttons.Add(new Button { rect = new Rect(cx + gap / 2f, y, bw3, bh), label = "Back  [Esc]", act = Back, enabled = true });
+                    }
+                    else
+                    {
+                        float bw4 = 200f * s;
+                        bool inPlay = phase == Phase.Play || phase == Phase.Result;
+                        buttons.Add(new Button { rect = new Rect(cx - bw4 * 1.5f - gap, y, bw4, bh), label = revealed ? "Origins shown" : "Show the origins", act = () => { CloseOverlay(); if (!revealed) Reveal(); }, enabled = inPlay && !revealed, gold = true });
+                        buttons.Add(new Button { rect = new Rect(cx - bw4 / 2f, y, bw4, bh), label = "Skip the chapter", act = () => { CloseOverlay(); Skip(); }, enabled = inPlay });
+                        buttons.Add(new Button { rect = new Rect(cx + bw4 / 2f + gap, y, bw4, bh), label = "Back  [Esc]", act = Back, enabled = true });
+                    }
                     break;
                 }
                 case Overlay.Wanderer:
@@ -2903,7 +3016,7 @@ namespace PointOfOrigin
                     Line("Plant", $"Work out where the shape began, stand on that cell, press {L(GameAction.Plant)}. With two or three seeds, plant every one before you grow: each grows its own shape and they merge.");
                     Line("Get clear", "Growth is solid and takes whoever stands inside it, so step out of the outline before you grow. Embers, acid, spikes and vents kill; the void takes whoever falls. Three lanterns per chapter.");
                     Line("Grow", $"Press {L(GameAction.Grow)}. Gold cells match the outline, red cells do not. An exact match opens the door, and the growth is ground you can walk on: it is your bridge.");
-                    Line("Rewind", $"{L(GameAction.Rewind)} clears a wrong growth and keeps your seeds where they are. Stand on a seed and press {L(GameAction.Plant)} to take it back and try another cell. After two failed tries {L(GameAction.Reveal)} shows the origins; {L(GameAction.Skip)} skips a chapter.");
+                    Line("Rewind", $"{L(GameAction.Rewind)} clears a wrong growth and keeps your seeds where they are. Stand on a seed and press {L(GameAction.Plant)} to take it back and try another cell. After two failed tries {L(GameAction.Reveal)} shows the origins. {L(GameAction.Skip)} asks the lantern's riddle: solve it and you may see the origins or skip the chapter.");
                     Line("Laws", "The same law makes different shapes in different places: rock clips growth, a post casts a shadow through it, and a bloom that reaches an ember puts it out.");
                     break;
                 }
@@ -2954,6 +3067,28 @@ namespace PointOfOrigin
                     }
                     y += 70f * s + (wallStage == 2 ? 84f * s : 0f);
                     if (wallNote.Length > 0) GUI.Label(new Rect(page.x, y, page.width, 48f * s), wallNote, stRowValue);
+                    break;
+                }
+                case Overlay.Riddle:
+                {
+                    GUI.Label(new Rect(0, PageTop - 10f * s, Screen.width, 76f * s), "THE LANTERN'S RIDDLE", stBanner);
+                    float y = PageTop + 76f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 26f * s), "Help costs a riddle. Cells are numbered along one row, left to right.", stRowValue);
+                    y += 34f * s;
+                    GUI.Label(new Rect(page.x, y, page.width, 100f * s), riddleText, stRowValue);
+                    y += 108f * s;
+                    if (!RiddleOpenFor)
+                    {
+                        string caret = ((int)(Time.time * 2f) & 1) == 0 ? "_" : " ";
+                        GUI.Label(new Rect(page.x, y, page.width * 0.3f, 40f * s), "The cell:", stRow);
+                        Panel(new Rect(page.x + page.width * 0.3f, y, page.width * 0.18f, 40f * s), new Color(0.12f, 0.14f, 0.2f, 1f));
+                        GUI.Label(new Rect(page.x + page.width * 0.3f + 12f * s, y, page.width * 0.18f, 40f * s), riddleGuess + caret, stRow);
+                        y += 48f * s;
+                        GUI.Label(new Rect(page.x, y, page.width, 26f * s), "Type the number or step it with the arrows, then say it.", stRowValue);
+                    }
+                    else GUI.Label(new Rect(page.x, y, page.width, 48f * s), "The lantern will show you the origins, or carry you past this chapter.", stRow);
+                    y += 44f * s;
+                    if (riddleNote.Length > 0) GUI.Label(new Rect(page.x, y, page.width, 48f * s), riddleNote, stRowValue);
                     break;
                 }
                 case Overlay.Wanderer:
@@ -3111,7 +3246,7 @@ namespace PointOfOrigin
                 GUI.Label(new Rect(0, Screen.height - 26f * s, Screen.width, 22f * s),
                     (muted ? "sound off   " : "") +
                     $"{L(GameAction.Left)} {L(GameAction.Right)} move   {L(GameAction.Jump)} jump   {L(GameAction.Plant)} plant   {L(GameAction.Grow)} grow   " +
-                    $"{L(GameAction.Rewind)} rewind   {L(GameAction.Skip)} skip   {L(GameAction.Mute)} sound   Esc menu", stSmallCentre);
+                    $"{L(GameAction.Rewind)} rewind   {L(GameAction.Skip)} riddle   {L(GameAction.Mute)} sound   Esc menu", stSmallCentre);
             }
 
             switch (phase)

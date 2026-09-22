@@ -88,7 +88,7 @@ namespace PointOfOrigin
                 case GameAction.Plant: return "Plant or take back a seed";
                 case GameAction.Grow: return "Grow";
                 case GameAction.Rewind: return "Rewind the growth";
-                case GameAction.Skip: return "Skip the chapter";
+                case GameAction.Skip: return "Hint or skip (after a riddle)";
                 case GameAction.Reveal: return "Reveal the origins";
                 case GameAction.Mute: return "Sound on or off";
                 case GameAction.Menu: return "Menu";

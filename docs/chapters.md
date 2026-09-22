@@ -15,6 +15,6 @@ thinking plants first. Every chapter has exactly one seed placement that grows i
 | 6 | Bent Echo | parity echo | 3 | 1 | 100x22 | 1 ember, 18 acid, 2 spikes, 2 spouts, 4 crumbling | 5 | no |
 | 7 | Quench | bloom | 3 | 1 | 96x18 | 1 ember, 8 acid, 4 spikes, 3 spouts, 6 crumbling | 5 | no |
 | 8 | Ashfall | bloom | 3 | 2 | 56x30 | 3 embers, 7 acid, 2 spouts, 4 crumbling | 25 | no |
-| 9 | Two Echoes | parity echo | 3 | 2 | 100x26 | 3 embers, 2 acid, 4 spikes, 1 spout, 2 crumbling | 9 | no |
+| 9 | Two Echoes | parity echo | 3 | 2 | 100x26 | 3 embers, 2 acid, 4 spikes, 2 spouts, 2 crumbling | 9 | no |
 | 10 | Origin | bloom | 4 | 1 | 100x24 | 4 embers, 4 acid, 5 spikes, 4 spouts, 2 crumbling | 6 | no |
-| 11 | Afterlight | parity echo | 3 | 2 | 140x24 | 4 embers, 38 acid, 4 spikes, 6 spouts, 25 crumbling | 9 | no |
+| 11 | Afterlight | parity echo | 3 | 2 | 140x24 | 5 embers, 38 acid, 5 spikes, 8 spouts, 25 crumbling | 9 | no |

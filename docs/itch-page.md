@@ -44,7 +44,7 @@ it takes an account). Find all ten origins and there is one chapter more.
 - E: plant or take back a seed where you stand
 - Enter: grow (again to finish instantly)
 - R: rewind the growth (seeds stay planted)
-- N: skip a level
+- N: the lantern's riddle; solve it for a hint or to skip the chapter
 - V: reveal the designer's origins after two failed attempts
 - M: sound on or off, Esc: pause menu (settings, controls, credits)
 

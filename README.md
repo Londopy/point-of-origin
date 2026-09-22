@@ -93,7 +93,7 @@ Controls page, and the arrows, W and Enter always work as well.
 | E | Plant or take back a seed in the cell you stand in (planting past the limit replaces the oldest) |
 | Enter / G | Grow; while growing, finish instantly |
 | R | Rewind the growth (planted seeds stay) |
-| N | Skip the level |
+| N | The lantern's riddle: solve it for a hint (the origins shown) or to skip the chapter |
 | V | Reveal the designer's origins (after two failed attempts) |
 | M | Sound on or off |
 | Esc | Pause menu in a chapter (resume, restart, chapter select, settings, controls, credits, quit); quit from the title |

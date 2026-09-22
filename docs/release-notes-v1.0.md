@@ -38,8 +38,9 @@ written in Nexium; the game is Unity 6; the ruin skylines, the growth burst,
 the stone grain and the far plateau come out of Houdini; the wanderer, the
 ember and the seed out of Blender. All sound is synthesised at start-up.
 
-**Controls.** A/D run, Space jump, E plant, Enter grow, R rewind, N skip,
-V reveal (after two failed tries), M sound, Esc menu. Every key except Esc
+**Controls.** A/D run, Space jump, E plant, Enter grow, R rewind, N the
+lantern's riddle (solve it for a hint or a skip), V reveal (after two failed
+tries), M sound, Esc menu. Every key except Esc
 can be rebound on the Controls page. Gamepads work: stick or d-pad, A jump,
 X plant, B grow, Y rewind, LB reveal, RB skip, Start menu.
 
