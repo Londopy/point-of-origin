@@ -1,5 +1,6 @@
 # Point of Origin
 
+[![Play on itch.io](https://img.shields.io/badge/play-on%20itch.io-fa5c5c?logo=itchdotio&logoColor=white)](https://londopy.itch.io/point-of-origin)
 [![CI](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml/badge.svg)](https://github.com/Londopy/point-of-origin/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Londopy/point-of-origin?include_prereleases&label=release&color=ffd166)](https://github.com/Londopy/point-of-origin/releases)
 [![Downloads](https://img.shields.io/github/downloads/Londopy/point-of-origin/total?color=ffd166)](https://github.com/Londopy/point-of-origin/releases)
